@@ -24,7 +24,7 @@
 #include "tcpdump.h"
 #include <ctype.h>
 
-//#define MODE_DEBUG 0
+
 
 static inline struct enamemem *
 lookup_emem(const u_char *ep)
@@ -48,11 +48,9 @@ lookup_emem(const u_char *ep)
   tp->e_addr1 = j;
   tp->e_addr2 = k;
   tp->e_nxt = (struct enamemem *)calloc(1, sizeof(*tp));
-  if (tp->e_nxt == NULL){
-#ifdef MODE_DEBUG
+  if (tp->e_nxt == NULL)
     printf("lookup_emem: calloc");
-#endif
-  }
+
   return tp;
 }
 
@@ -149,86 +147,52 @@ void mgmt_header_print(const u_char *p, const u_int8_t **srcp,
     *srcp = hp->sa;
   if (dstp != NULL)
     *dstp = hp->da;
- 
-#ifdef MODE_DEBUG
+  
   printf("BSSID:%s DA:%s SA:%s ",
 	 etheraddr_string((hp)->bssid), etheraddr_string((hp)->da),
 	 etheraddr_string((hp)->sa));
-#endif
+ 
 
 }
 
 void print_chaninfo(int freq, int flags)
 {
-#ifdef MODE_DEBUG
-  printf("%u MHz", freq);
-#endif
-  if (IS_CHAN_FHSS(flags)){
-#ifdef MODE_DEBUG
-    printf(" FHSS");
-#endif
-  }
-  if (IS_CHAN_A(flags)) {
-    if (flags & IEEE80211_CHAN_HALF){
-#ifdef MODE_DEBUG
-      printf(" 11a/10Mhz");
-#endif
-    }
-    else if (flags & IEEE80211_CHAN_QUARTER){
-#ifdef MODE_DEBUG
-      printf(" 11a/5Mhz");
-#endif
-    }
-    else{
-#ifdef MODE_DEBUG
-      printf(" 11a");
-#endif
-    }
+        printf("%u MHz", freq);
+        if (IS_CHAN_FHSS(flags))
+                printf(" FHSS");
+        if (IS_CHAN_A(flags)) {
+                if (flags & IEEE80211_CHAN_HALF)
+                        printf(" 11a/10Mhz");
+                else if (flags & IEEE80211_CHAN_QUARTER)
+                        printf(" 11a/5Mhz");
+                else
+                        printf(" 11a");
+        }
+        if (IS_CHAN_ANYG(flags)) {
+                if (flags & IEEE80211_CHAN_HALF)
+                        printf(" 11g/10Mhz");
+                else if (flags & IEEE80211_CHAN_QUARTER)
+                        printf(" 11g/5Mhz");
+                else
+                        printf(" 11g");
+        } else if (IS_CHAN_B(flags))
+                printf(" 11b");
+        if (flags & IEEE80211_CHAN_TURBO)
+                printf(" Turbo");
+        if (flags & IEEE80211_CHAN_HT20)
+                printf(" ht/20");
+        else if (flags & IEEE80211_CHAN_HT40D)
+                printf(" ht/40-");
+        else if (flags & IEEE80211_CHAN_HT40U)
+                printf(" ht/40+");
+        printf(" ");
 
-  }
-  if (IS_CHAN_ANYG(flags)){
-    if (flags & IEEE80211_CHAN_HALF){
-#ifdef MODE_DEBUG
-      printf(" 11g/10Mhz");
-#endif
-    }
-    else if (flags & IEEE80211_CHAN_QUARTER){
-#ifdef MODE_DEBUG
-      printf(" 11g/5Mhz");
-#endif
-    }
-    else{
-#ifdef MODE_DEBUG
-      printf(" 11g");
-#endif
-    }
-  } else if (IS_CHAN_B(flags)){
-#ifdef MODE_DEBUG
-    printf(" 11b");
-#endif
-  }
-  if (flags & IEEE80211_CHAN_TURBO){
-#ifdef MODE_DEBUG
-    printf(" Turbo");
-#endif
-  }
-  if (flags & IEEE80211_CHAN_HT20){
-#ifdef MODE_DEBUG
-    printf(" ht/20");
-#endif
-  }
-  else if (flags & IEEE80211_CHAN_HT40D){
-#ifdef MODE_DEBUG
-    printf(" ht/40-");
-#endif
-  }
-  else if (flags & IEEE80211_CHAN_HT40U){
-#ifdef MODE_DEBUG
-    printf(" ht/40+");
-#endif
-  }
-  
+
+
 }
+
+
+
 
 void ieee_802_11_hdr_print(u_int16_t fc, const u_char *p, u_int hdrlen,
     u_int meshdrlen, const u_int8_t **srcp, const u_int8_t **dstp)
@@ -237,50 +201,45 @@ void ieee_802_11_hdr_print(u_int16_t fc, const u_char *p, u_int hdrlen,
   vflag=1;
   if (vflag) {
     if (FC_MORE_DATA(fc))
-      if (FC_MORE_FLAG(fc)){
-#ifdef MODE_DEBUG
-	printf("More Fragments ");
-#endif
-	}
-    if (FC_POWER_MGMT(fc)){
-#ifdef MODE_DEBUG
-      printf("Pwr Mgmt ");
-#endif
+      printf("More Data ");
+                if (FC_MORE_FLAG(fc))
+                        printf("More Fragments ");
+                if (FC_POWER_MGMT(fc))
+                        printf("Pwr Mgmt ");
+                if (FC_RETRY(fc))
+                        printf("Retry ");
+                if (FC_ORDER(fc))
+                        printf("Strictly Ordered ");
+                if (FC_WEP(fc))
+                        printf("WEP Encrypted ");
+                if (FC_TYPE(fc) != T_CTRL || FC_SUBTYPE(fc) != CTRL_PS_POLL)
+                        printf("%dus ",
+                            EXTRACT_LE_16BITS(
+                                &((const struct mgmt_header_t *)p)->duration));
+        }
+        switch (FC_TYPE(fc)) {
+        case T_MGMT:
+                mgmt_header_print(p, srcp, dstp);
+                break;
+        default:
+                printf("(header) unknown IEEE802.11 frame type (%d)",
+                    FC_TYPE(fc));
+                *srcp = NULL;
+                *dstp = NULL;
+                break;
+        }
 }
-    if (FC_RETRY(fc)){
-#ifdef MODE_DEBUG
-      printf("Retry ");
-#endif
+/*
+static int extract_header_length(u_int16_t fc)
+{
+    switch (FC_TYPE(fc)) {
+        case T_MGMT:
+                return MGMT_HDRLEN;
+	
 }
-    if (FC_ORDER(fc)){
-#ifdef MODE_DEBUG
-      printf("Strictly Ordered ");
-#endif
+return 0 ; 
 }
-    if (FC_WEP(fc)){
-#ifdef MODE_DEBUG
-      printf("WEP Encrypted ");
-#endif
-}
-    if (FC_TYPE(fc) != T_CTRL || FC_SUBTYPE(fc) != CTRL_PS_POLL){
-#ifdef MODE_DEBUG
-      printf(" this is me %d ", EXTRACT_LE_16BITS(&((const struct mgmt_header_t *)p)->duration));
-#endif
-} 
- }
-  switch (FC_TYPE(fc)) {
-  case T_MGMT:
-    mgmt_header_print(p, srcp, dstp);
-    break;
-  default:
-#ifdef MODE_DEBUG
-    printf("UH%d",FC_TYPE(fc));
-#endif
-    *srcp = NULL;
-    *dstp = NULL;
-    break;
-  }
-}
+*/
 
 /*
  * Print out a null-terminated filename (or other ascii string).
@@ -302,20 +261,14 @@ fn_print(register const u_char *s, register const u_char *ep)
     }
     if (!isascii(c)) {
       c = toascii(c);
-#ifdef MODE_DEBUG
       putchar('M');
       putchar('-');
-#endif
     }
     if (!isprint(c)) {
-#ifdef MODE_DEBUG
       c ^= 0x40;      /* DEL to ?, others to alpha */
       putchar('^');
-#endif
     }
-#ifdef MODE_DEBUG
     putchar(c);
-#endif
   }
   return(ret);
 }
@@ -632,40 +585,38 @@ int parse_elements(struct mgmt_body_t *pbody, const u_char *p, int offset,u_int 
   return 1;
 }
 
-int handle_beacon(const u_char *p, u_int length)
+ int handle_beacon(const u_char *p, u_int length)
 {
-  struct mgmt_body_t pbody;
-  int offset = 0;
-  int ret;
-  
-  memset(&pbody, 0, sizeof(pbody));
-	
-  if (!TTEST2(*p, IEEE802_11_TSTAMP_LEN + IEEE802_11_BCNINT_LEN +
-	      IEEE802_11_CAPINFO_LEN))
-    return 0;
-  if (length < IEEE802_11_TSTAMP_LEN + IEEE802_11_BCNINT_LEN +
-      IEEE802_11_CAPINFO_LEN)
-    return 0;
-  memcpy(&pbody.timestamp, p, IEEE802_11_TSTAMP_LEN);
-  offset += IEEE802_11_TSTAMP_LEN;
-  length -= IEEE802_11_TSTAMP_LEN;
-  pbody.beacon_interval = EXTRACT_LE_16BITS(p+offset);
-  offset += IEEE802_11_BCNINT_LEN;
-  length -= IEEE802_11_BCNINT_LEN;
-  pbody.capability_info = EXTRACT_LE_16BITS(p+offset);
-  offset += IEEE802_11_CAPINFO_LEN;
-  length -= IEEE802_11_CAPINFO_LEN;
-  
-  ret = parse_elements(&pbody, p, offset, length);
-  
+        struct mgmt_body_t pbody;
+        int offset = 0;
+        int ret;
 
-#ifdef MODE_DEBUG
-  PRINT_SSID(pbody);
-  PRINT_RATES(pbody);
-  printf(" %s",
-	 CAPABILITY_ESS(pbody.capability_info) ? "ESS" : "IBSS");
-  PRINT_DS_CHANNEL(pbody);
-#endif
+        memset(&pbody, 0, sizeof(pbody));
+
+        if (!TTEST2(*p, IEEE802_11_TSTAMP_LEN + IEEE802_11_BCNINT_LEN +
+            IEEE802_11_CAPINFO_LEN))
+                return 0;
+        if (length < IEEE802_11_TSTAMP_LEN + IEEE802_11_BCNINT_LEN +
+            IEEE802_11_CAPINFO_LEN)
+                return 0;
+        memcpy(&pbody.timestamp, p, IEEE802_11_TSTAMP_LEN);
+        offset += IEEE802_11_TSTAMP_LEN;
+        length -= IEEE802_11_TSTAMP_LEN;
+        pbody.beacon_interval = EXTRACT_LE_16BITS(p+offset);
+        offset += IEEE802_11_BCNINT_LEN;
+        length -= IEEE802_11_BCNINT_LEN;
+        pbody.capability_info = EXTRACT_LE_16BITS(p+offset);
+        offset += IEEE802_11_CAPINFO_LEN;
+        length -= IEEE802_11_CAPINFO_LEN;
+
+        ret = parse_elements(&pbody, p, offset, length);
+
+	PRINT_SSID(pbody);
+        PRINT_RATES(pbody);
+        printf(" %s",
+            CAPABILITY_ESS(pbody.capability_info) ? "ESS" : "IBSS");
+        PRINT_DS_CHANNEL(pbody);
+
         return ret;
 }
 
@@ -674,7 +625,7 @@ int mgmt_body_print(u_int16_t fc, const struct mgmt_header_t *pmh, const u_char 
 {
   switch (FC_SUBTYPE(fc)) {
   case ST_BEACON:
-//    printf("Beacon");
+    printf("Beacon");
     return handle_beacon(p, length);
   }
   return 0; 
@@ -689,9 +640,7 @@ u_int ieee802_11_print(const u_char *p, u_int length, u_int orig_caplen, int pad
   caplen = orig_caplen;
   /* Remove FCS, if present */
   if (length < fcslen) {
-#ifdef MODE_DEBUG
-    printf("len<fcslen");
-#endif
+    printf("[|802.11]");
     return caplen;
         }
   length -= fcslen;
@@ -703,9 +652,7 @@ u_int ieee802_11_print(const u_char *p, u_int length, u_int orig_caplen, int pad
   }
   
   if (caplen < IEEE802_11_FC_LEN) {
-#ifdef MODE_DEBUG
-    printf("cap<fcslen");
-#endif
+    printf("[|802.11]");
     return orig_caplen;
   }
 
@@ -716,9 +663,7 @@ u_int ieee802_11_print(const u_char *p, u_int length, u_int orig_caplen, int pad
   meshdrlen = 0;
     
   if (caplen < hdrlen) {
-#ifdef MODE_DEBUG
-    printf("caplen<hdrlen");
-#endif
+    printf("[|802.11]");
     return hdrlen;
   }
 
@@ -731,16 +676,12 @@ u_int ieee802_11_print(const u_char *p, u_int length, u_int orig_caplen, int pad
   case T_MGMT:
     if (!mgmt_body_print(fc,
 			 (const struct mgmt_header_t *)(p - hdrlen), p, length)) {
-#ifdef MODE_DEBUG
       printf("[|802.11]");
-#endif
       return hdrlen;
     }
     break;
   default:
-#ifdef MODE_DEBUG
-    printf("UH (%d)", FC_TYPE(fc)); //unknown header
-#endif
+    printf("unknown 802.11 frame type (%d)", FC_TYPE(fc));
     break;
   }
   
@@ -811,15 +752,11 @@ int print_radiotap_field(struct cpack_state *s, u_int32_t bit, u_int8_t *flags)
      * size we do not know, so we cannot
      * proceed.  Just print the bit number.
      */
-#ifdef MODE_DEBUG
     printf("[bit %u] ", bit);
-#endif
     return -1;
   }
   if (rc != 0) {
-#ifdef MODE_DEBUG
     printf("[|802.11]");
-#endif
     return rc;
   }
 
@@ -828,98 +765,55 @@ int print_radiotap_field(struct cpack_state *s, u_int32_t bit, u_int8_t *flags)
     print_chaninfo(u.u16, u2.u16);
     break;
   case IEEE80211_RADIOTAP_FHSS:
-#ifdef MODE_DEBUG
     printf("fhset %d fhpat %d ", u.u16 & 0xff, (u.u16 >> 8) & 0xff);
-#endif
     break;
   case IEEE80211_RADIOTAP_RATE:
-    if (u.u8 & 0x80){
-#ifdef MODE_DEBUG
+    if (u.u8 & 0x80)
       PRINT_HT_RATE("", u.u8, " Mb/s ");
-#endif
-    }
-    else{
-#ifdef MODE_DEBUG
+    else
       PRINT_RATE("", u.u8, " Mb/s ");
-#endif
-    }
     break;
   case IEEE80211_RADIOTAP_DBM_ANTSIGNAL:
-#ifdef MODE_DEBUG
     printf("%ddB signal ", u.i8);
-#endif
     break;
   case IEEE80211_RADIOTAP_DBM_ANTNOISE:
-#ifdef MODE_DEBUG
     printf("%ddB noise ", u.i8);
-#endif
     break;
   case IEEE80211_RADIOTAP_DB_ANTSIGNAL:
-#ifdef MODE_DEBUG
     printf("%ddB signal ", u.u8);
-#endif
     break;
   case IEEE80211_RADIOTAP_DB_ANTNOISE:
-#ifdef MODE_DEBUG
     printf("%ddB noise ", u.u8);
-#endif
     break;
   case IEEE80211_RADIOTAP_LOCK_QUALITY:
-#ifdef MODE_DEBUG
     printf("%u sq ", u.u16);
-#endif
     break;
   case IEEE80211_RADIOTAP_TX_ATTENUATION:
-#ifdef MODE_DEBUG
     printf("%d tx power ", -(int)u.u16);
-#endif
     break;
   case IEEE80211_RADIOTAP_DB_TX_ATTENUATION:
-#ifdef MODE_DEBUG
     printf("%ddB tx power ", -(int)u.u8);
-#endif
     break;
   case IEEE80211_RADIOTAP_DBM_TX_POWER:
-#ifdef MODE_DEBUG
     printf("%ddBm tx power ", u.i8);
-#endif
     break;
   case IEEE80211_RADIOTAP_FLAGS:
-    if (u.u8 & IEEE80211_RADIOTAP_F_CFP){
-#ifdef MODE_DEBUG
+    if (u.u8 & IEEE80211_RADIOTAP_F_CFP)
       printf("cfp ");
-#endif
-    }
-    if (u.u8 & IEEE80211_RADIOTAP_F_SHORTPRE){
-#ifdef MODE_DEBUG
+    if (u.u8 & IEEE80211_RADIOTAP_F_SHORTPRE)
       printf("short preamble ");
-#endif
-    }
-    if (u.u8 & IEEE80211_RADIOTAP_F_WEP){
-#ifdef MODE_DEBUG
+    if (u.u8 & IEEE80211_RADIOTAP_F_WEP)
       printf("wep ");
-#endif
-  }
-    if (u.u8 & IEEE80211_RADIOTAP_F_FRAG){
-#ifdef MODE_DEBUG
+    if (u.u8 & IEEE80211_RADIOTAP_F_FRAG)
       printf("fragmented ");
-#endif
-    }
-    if (u.u8 & IEEE80211_RADIOTAP_F_BADFCS){
-#ifdef MODE_DEBUG
+    if (u.u8 & IEEE80211_RADIOTAP_F_BADFCS)
       printf("bad-fcs ");
-#endif
-    }
     break;
   case IEEE80211_RADIOTAP_ANTENNA:
-#ifdef MODE_DEBUG
     printf("antenna %d ", u.u8);
-#endif
     break;
   case IEEE80211_RADIOTAP_TSFT:
-#ifdef MODE_DEBUG
     printf(/*% PRIu64 */"us tsft "/*, u.u64*/);
-#endif
     break;
   case IEEE80211_RADIOTAP_XCHANNEL:
     print_chaninfo(u2.u16, u.u32);
@@ -952,9 +846,7 @@ int print_radiotap_field(struct cpack_state *s, u_int32_t bit, u_int8_t *flags)
   u_int fcslen;
 
   if (caplen < sizeof(*hdr)) {
-#ifdef MODE_DEBUG
-    printf("caplen<hdr");
-#endif
+    printf("[|802.11]");
     return caplen;
   }
 
@@ -963,9 +855,7 @@ int print_radiotap_field(struct cpack_state *s, u_int32_t bit, u_int8_t *flags)
   len = EXTRACT_LE_16BITS(&hdr->it_len);
 
   if (caplen < len) {
-#ifdef MODE_DEBUG
-    printf("caplen<len");
-#endif
+    printf("[|802.11]");
     return caplen;
   }
   for (last_presentp = &hdr->it_present;
@@ -975,29 +865,31 @@ int print_radiotap_field(struct cpack_state *s, u_int32_t bit, u_int8_t *flags)
 
   /* are there more bitmap extensions than bytes in header? */
   if (IS_EXTENDED(last_presentp)) {
-#ifdef MODE_DEBUG
-    printf("more bitmap ext than bytes");
-#endif
+    printf("[|802.11]");
     return caplen;
   }
   iter = (u_char*)(last_presentp + 1);
 
   if (cpack_init(&cpacker, (u_int8_t*)iter, len - (iter - p)) != 0) {
     /* XXX */
-#ifdef MODE_DEBUG
-    printf("XXX");
-#endif
+    printf("[|802.11]");
     return caplen;
   }
 
+  /* Assume no flags */
   flags = 0;
+  /* Assume no Atheros padding between 802.11 header and body */
   pad = 0;
+  /* Assume no FCS at end of frame */
   fcslen = 0;
   for (bit0 = 0, presentp = &hdr->it_present; presentp <= last_presentp;
        presentp++, bit0 += 32) {
     for (present = EXTRACT_LE_32BITS(presentp); present;
 	 present = next_present) {
+      /* clear the least significant bit that is set */
       next_present = present & (present - 1);
+
+      /* extract the least significant bit that is set */
       bit = (enum ieee80211_radiotap_type)
 	(bit0 + BITNO_32(present ^ next_present));
 
@@ -1007,9 +899,9 @@ int print_radiotap_field(struct cpack_state *s, u_int32_t bit, u_int8_t *flags)
   }
 
   if (flags & IEEE80211_RADIOTAP_F_DATAPAD)
-    pad = 1;
+    pad = 1;        /* Atheros padding */
   if (flags & IEEE80211_RADIOTAP_F_FCS)
-    fcslen = 4;
+    fcslen = 4;     /* FCS at end of packet */
  out:
   return len + ieee802_11_print(p + len, length - len, caplen - len, pad,fcslen);
 #undef BITNO_32
@@ -1031,9 +923,7 @@ void process_packet (u_char * args, const struct pcap_pkthdr *header, const u_ch
 
   snapend = packet+ header->caplen; 
   ieee802_11_if_print(header,packet) ;
-#ifdef MODE_DEBUG
   printf("\n------------------------------------\n");
-#endif
 }
 
 
@@ -1075,6 +965,7 @@ int main(int argc, char* argv[])
     if (r == -1){  fprintf (stderr, "Loop: %s", pcap_geterr (handle)); exit (1);
     } // -2 : breakoff from pcap loop
   }
+  printf("hi \n"); 
   pcap_close (handle);
    return 0 ;
 
