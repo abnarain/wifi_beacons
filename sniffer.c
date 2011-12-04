@@ -24,7 +24,8 @@
 #include "tcpdump.h"
 #include <ctype.h>
 #include "create-interface.h"
-//#define MODE_DEBUG 0
+
+#define MODE_DEBUG 0
 
 static inline struct enamemem *
 lookup_emem(const u_char *ep)
@@ -1040,43 +1041,49 @@ void process_packet (u_char * args, const struct pcap_pkthdr *header, const u_ch
 static pthread_t signal_thread;
 static pthread_t update_thread;
 
-
-int main(int argc, char* argv[])
-{
-
+int instantion_pcap (char* device){
+ 
+  checkup(device);
+  
   char errbuf[PCAP_ERRBUF_SIZE]; 
   bpf_u_int32 netp;   
   bpf_u_int32 maskp;  
   struct bpf_program fp; 
   int r;  
-  char *device= argv[1];
-  pcap_t *handle;  
+  pcap_t *handle;
+  
   char *filter = "type mgt subtype beacon"; //the awesome one liner
-  checkup(device);
-
+  
+  
   if (device == NULL) {
-      device = pcap_lookupdev (errbuf); 
-      if (device == NULL){  printf ("%s", errbuf); exit (1);}
-    }
+    device = pcap_lookupdev (errbuf); 
+    if (device == NULL){  printf ("%s", errbuf); exit (1);}
+  }
   handle = pcap_open_live (device, BUFSIZ,1,0,errbuf); 
   if (handle == NULL) { fprintf (stderr, "%s", errbuf);
-      exit (1);
-    }
+    exit (1);
+  }
   if (pcap_compile (handle, &fp, filter, 0, maskp) == -1){
       fprintf (stderr, "Compile: %s\n", pcap_geterr (handle)); exit (1);
-    }
-
+  }
+  
   if (pcap_setfilter (handle, &fp) == -1){
-      fprintf (stderr, "Setfilter: %s", pcap_geterr (handle)); exit (1);
-    }
+    fprintf (stderr, "Setfilter: %s", pcap_geterr (handle)); exit (1);
+  }
   pcap_freecode (&fp);
-
+  
   if ((r = pcap_loop(handle, -1, process_packet, NULL)) < 0){
     if (r == -1){  fprintf (stderr, "Loop: %s", pcap_geterr (handle)); exit (1);
     } // -2 : breakoff from pcap loop
   }
   pcap_close (handle);
-   return 0 ;
+ 
+}
+int main(int argc, char* argv[])
+{
+  char *device= argv[1];
+  instantion_pcap (device);
+  return 0 ;
 
 
 

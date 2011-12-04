@@ -145,15 +145,16 @@ int open_infd(const char device[])
   //close (in_fd) ;
   return in_fd ;
 }
+
 int checkup(char * device){
   if (down_radio_interface(device))
-      return 1;
-    if (up_radio_interface(device))
-      return 1;
-    if (config_radio_interface(device))
-      return 1;
-    int in_fd ;
-   in_fd = open_infd(device);
-
-return 0;
+    return 1;
+  if (up_radio_interface(device))
+    return 1;
+  if (config_radio_interface(device))
+    return 1;
+  int in_fd ;
+  in_fd = open_infd(device);
+  
+  return 0;
 }
