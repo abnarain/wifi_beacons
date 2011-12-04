@@ -12,7 +12,7 @@
 #define SLEEP_PERIOD 2
 static pthread_t signal_thread;
 static pthread_t update_thread;
-static pthread_mutex_t update_lock;
+
 
 void write_update(int a){
 printf("wrote update %d\n",a);

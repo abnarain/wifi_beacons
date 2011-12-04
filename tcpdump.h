@@ -39,16 +39,6 @@ static const int ieee80211_htrates[16] = {
   234,            /* IFM_IEEE80211_MCS14 */
   260,            /* IFM_IEEE80211_MCS15 */
 };
-#define PRINT_HT_RATE(_sep, _r, _suf) \
-  printf("%s%.1f%s", _sep, (.5 * ieee80211_htrates[(_r) & 0xf]), _suf)
-
-
-#define PRINT_SSID(p) \
-  if (p.ssid_present) { \
-  printf(" ("); \
-  fn_print(p.ssid.ssid, NULL); \
-  printf(")"); \
-  }
 
 
 struct tok {
@@ -237,28 +227,6 @@ struct mgmt_body_t {
         ((flags & IEEE80211_CHAN_G) == IEEE80211_CHAN_G)
 #define IS_CHAN_ANYG(flags) \
         (IS_CHAN_PUREG(flags) || IS_CHAN_G(flags))
-
-
-#define PRINT_RATE(_sep, _r, _suf) \
-  printf("%s%2.1f%s", _sep, (.5 * ((_r) & 0x7f)), _suf)
-#define PRINT_RATES(p) \
-  if (p.rates_present) { \
-  int z; \
-  const char *sep = " ["; \
-  for (z = 0; z < p.rates.length ; z++) { \
-  PRINT_RATE(sep, p.rates.rate[z], \
-	     (p.rates.rate[z] & 0x80 ? "*" : "")); \
-  sep = " "; \
-  } \
-  if (p.rates.length != 0) \
-    printf(" Mbit]"); \
-  }
-
-#define PRINT_DS_CHANNEL(p) \
-  if (p.ds_present) \
-    printf(" CH: %u", p.ds.channel); \
-  printf("%s", \
-	 CAPABILITY_PRIVACY(p.capability_info) ? ", PRIVACY" : "" );
 
 
 /*

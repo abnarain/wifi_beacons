@@ -1,4 +1,5 @@
-#include<error.h>
+#include <unistd.h>
+#include <error.h>
 #include <netinet/in.h>    
 #include <sys/ioctl.h>
 #include <stdio.h>
@@ -18,21 +19,41 @@
 #include <errno.h>
 #include <math.h>
 #include <pcap.h>
+#include <ctype.h>
+#include <inttypes.h>
+#include <signal.h>
 #include "util.h"
 #include "ieee80211_radiotap.h"
 #include "ieee80211.h"
 #include "tcpdump.h"
-#include <ctype.h>
 #include "create-interface.h"
 
 #define MODE_DEBUG 0
+
+typedef struct r_packet{
+  int freq ;
+  int signal;
+  int noise; 
+  int channel;
+  int rate; 
+  char mac_address[11];
+  char * essid ; 
+  int fcs_err;
+  int short_pr_err;
+  int wep; 
+  int fragmented;
+  int cfp ;
+  int strictly_ordered;
+  int pw_mgmt; 
+}r_packet ;
+
+
 
 static inline struct enamemem *
 lookup_emem(const u_char *ep)
 {
   register u_int i, j, k;
   struct enamemem *tp;
-
   k = (ep[0] << 8) | ep[1];
   j = (ep[2] << 8) | ep[3];
   i = (ep[4] << 8) | ep[5];
@@ -77,8 +98,7 @@ tok2strbuf(register const struct tok *lp, register const char *fmt,
 }
 
 /*Convert a token value to a string; use "fmt" if not found.  */
-const char *
-tok2str(register const struct tok *lp, register const char *fmt,
+const char * tok2str(register const struct tok *lp, register const char *fmt,
         register int v)
 {
   static char buf[4][128];
@@ -92,8 +112,7 @@ tok2str(register const struct tok *lp, register const char *fmt,
 static const char hex[] = "0123456789abcdef";
 
 
-const char *
-etheraddr_string(register const u_char *ep)
+const char * etheraddr_string(register const u_char *ep)
 {
   int nflag;
   nflag=1; 
@@ -109,13 +128,6 @@ etheraddr_string(register const u_char *ep)
 #ifdef USE_ETHER_NTOHOST
   if (!nflag) {
     char buf2[BUFSIZE];
-
-    /*
-     * We don't cast it to "const struct ether_addr *"
-     * because some systems fail to declare the second
-     * argument as a "const" pointer, even though they
-     * don't modify what it points to.
-     */
     if (ether_ntohost(buf2, (struct ether_addr *)ep) == 0) {
       tp->e_name = strdup(buf2);
       return (tp->e_name);
@@ -141,8 +153,7 @@ etheraddr_string(register const u_char *ep)
   return (tp->e_name);
 }
 
-void mgmt_header_print(const u_char *p, const u_int8_t **srcp,
-		  const u_int8_t **dstp)
+void mgmt_header_print(const u_char *p, const u_int8_t **srcp,  const u_int8_t **dstp)
 {
   const struct mgmt_header_t *hp = (const struct mgmt_header_t *) p;
 
@@ -151,6 +162,7 @@ void mgmt_header_print(const u_char *p, const u_int8_t **srcp,
   if (dstp != NULL)
     *dstp = hp->da;
  
+
 #ifdef MODE_DEBUG
   printf("BSSID:%s DA:%s SA:%s ",
 	 etheraddr_string((hp)->bssid), etheraddr_string((hp)->da),
@@ -164,6 +176,7 @@ void print_chaninfo(int freq, int flags)
 #ifdef MODE_DEBUG
   printf("%u MHz", freq);
 #endif
+
   if (IS_CHAN_FHSS(flags)){
 #ifdef MODE_DEBUG
     printf(" FHSS");
@@ -265,7 +278,7 @@ void ieee_802_11_hdr_print(u_int16_t fc, const u_char *p, u_int hdrlen,
 }
     if (FC_TYPE(fc) != T_CTRL || FC_SUBTYPE(fc) != CTRL_PS_POLL){
 #ifdef MODE_DEBUG
-      printf(" this is me %d ", EXTRACT_LE_16BITS(&((const struct mgmt_header_t *)p)->duration));
+      printf(" dur: %d ", EXTRACT_LE_16BITS(&((const struct mgmt_header_t *)p)->duration));
 #endif
 } 
  }
@@ -283,9 +296,7 @@ void ieee_802_11_hdr_print(u_int16_t fc, const u_char *p, u_int hdrlen,
   }
 }
 
-/*
- * Print out a null-terminated filename (or other ascii string).
- * If ep is NULL, assume no truncation check is needed.
+/* * Print out a null-terminated filename (or other ascii string). If ep is NULL, assume no truncation check is needed.
  * Return true if truncated.
  */
 int
@@ -293,7 +304,7 @@ fn_print(register const u_char *s, register const u_char *ep)
 {
   register int ret;
   register u_char c;
-
+  
   ret = 1;                        /* assume truncated */
   while (ep == NULL || s < ep) {
     c = *s++;
@@ -323,15 +334,6 @@ fn_print(register const u_char *s, register const u_char *ep)
 
 
 
-
-#define PRINT_SSID(p) \
-  if (p.ssid_present) { \
-  printf(" ("); \
-  fn_print(p.ssid.ssid, NULL); \
-  printf(")"); \
-  }
-
-
 //==============================================================
 
 
@@ -356,19 +358,14 @@ u_int8_t * cpack_next_boundary(u_int8_t *buf, u_int8_t *p, size_t alignment)
 u_int8_t * cpack_align_and_reserve(struct cpack_state *cs, size_t wordsize)
 {
   u_int8_t *next;
-
-  /* Ensure alignment. */
   next = cpack_next_boundary(cs->c_buf, cs->c_next, wordsize);
-
-  /* Too little space for wordsize bytes? */
   if (next - cs->c_buf + wordsize > cs->c_len)
     return NULL;
 
   return next;
 }
 
-int
-cpack_uint32(struct cpack_state *cs, u_int32_t *u)
+int cpack_uint32(struct cpack_state *cs, u_int32_t *u)
 {
   u_int8_t *next;
 
@@ -376,15 +373,12 @@ cpack_uint32(struct cpack_state *cs, u_int32_t *u)
     return -1;
 
   *u = EXTRACT_LE_32BITS(next);
-
-  /* Move pointer past the u_int32_t. */
   cs->c_next = next + sizeof(*u);
   return 0;
 }
 
-/* Unpack a 16-bit unsigned integer. */
-int
-cpack_uint16(struct cpack_state *cs, u_int16_t *u)
+
+int cpack_uint16(struct cpack_state *cs, u_int16_t *u)
 {
   u_int8_t *next;
 
@@ -393,22 +387,18 @@ cpack_uint16(struct cpack_state *cs, u_int16_t *u)
 
   *u = EXTRACT_LE_16BITS(next);
 
-  /* Move pointer past the u_int16_t. */
   cs->c_next = next + sizeof(*u);
   return 0;
 }
 
-/* Unpack an 8-bit unsigned integer. */
-int
-cpack_uint8(struct cpack_state *cs, u_int8_t *u)
+
+int cpack_uint8(struct cpack_state *cs, u_int8_t *u)
 {
-  /* No space left? */
+
   if ((size_t)(cs->c_next - cs->c_buf) >= cs->c_len)
     return -1;
 
   *u = *cs->c_next;
-
-  /* Move pointer past the u_int8_t. */
   cs->c_next++;
   return 0;
 }
@@ -426,18 +416,13 @@ cpack_init(struct cpack_state *cs, u_int8_t *buf, size_t buflen)
   return 0;
 }
 
-/* Unpack a 64-bit unsigned integer. */
-int
-cpack_uint64(struct cpack_state *cs, u_int64_t *u)
+int cpack_uint64(struct cpack_state *cs, u_int64_t *u)
 {
   u_int8_t *next;
 
   if ((next = cpack_align_and_reserve(cs, sizeof(*u))) == NULL)
     return -1;
-
   *u = EXTRACT_LE_64BITS(next);
-
-  /* Move pointer past the u_int64_t. */
   cs->c_next = next + sizeof(*u);
   return 0;
 }
@@ -486,13 +471,7 @@ int parse_elements(struct mgmt_body_t *pbody, const u_char *p, int offset,u_int 
 	length -= ssid.length;
       }
       ssid.ssid[ssid.length] = '\0';
-      /*
-       * Present and not truncated.
-       *
-       * If we haven't already seen an SSID IE,
-       * copy this one, otherwise ignore this one,
-       * so we later report the first one we saw.
-       */
+      //
       if (!pbody->ssid_present) {
 	pbody->ssid = ssid;
 	pbody->ssid_present = 1;
@@ -520,13 +499,7 @@ int parse_elements(struct mgmt_body_t *pbody, const u_char *p, int offset,u_int 
 	length -= challenge.length;
       }
       challenge.text[challenge.length] = '\0';
-      /*
-       * Present and not truncated.
-       *
-       * If we haven't already seen a challenge IE,
-       * copy this one, otherwise ignore this one,
-       * so we later report the first one we saw.
-       */
+      //
       if (!pbody->challenge_present) {
 	pbody->challenge = challenge;
 	pbody->challenge_present = 1;
@@ -633,6 +606,42 @@ int parse_elements(struct mgmt_body_t *pbody, const u_char *p, int offset,u_int 
   return 1;
 }
 
+
+void PRINT_HT_RATE(char* _sep,  u_int8_t _r, char* _suf){
+  printf("  %s%.1f%s ", _sep, (.5 * ieee80211_htrates[(_r) & 0xf]), _suf);
+}
+
+void PRINT_SSID( struct mgmt_body_t p){ 
+  if (p.ssid_present) { 
+    printf(" ( "); 
+    fn_print(p.ssid.ssid, NULL); 
+    printf(")"); 
+  }
+}
+void PRINT_RATE(char* _sep,  u_int8_t _r, char* _suf) {
+printf(" SRATE %s%2.1f%s ERATE ", _sep, (.5 * ((_r) & 0x7f)), _suf);
+}
+void PRINT_RATES(struct mgmt_body_t p) {
+  if (p.rates_present) {
+  int z; 
+  const char *sep = " ["; 
+  for (z = 0; z < p.rates.length ; z++) { 
+  PRINT_RATE(sep, p.rates.rate[z], (p.rates.rate[z] & 0x80 ? "*" : "")); 
+  sep = " "; 
+  } 
+  if (p.rates.length != 0) 
+    printf(" Mbit] "); 
+  }
+
+}
+void PRINT_DS_CHANNEL( struct mgmt_body_t  p){
+  if (p.ds_present) {
+    printf(" CH: %u", p.ds.channel);
+  } 
+  printf("%s $$ ", CAPABILITY_PRIVACY(p.capability_info) ? ", PRIVACY" : "" );
+
+}
+
 int handle_beacon(const u_char *p, u_int length)
 {
   struct mgmt_body_t pbody;
@@ -663,8 +672,7 @@ int handle_beacon(const u_char *p, u_int length)
 #ifdef MODE_DEBUG
   PRINT_SSID(pbody);
   PRINT_RATES(pbody);
-  printf(" %s",
-	 CAPABILITY_ESS(pbody.capability_info) ? "ESS" : "IBSS");
+  printf(" %s",	 CAPABILITY_ESS(pbody.capability_info) ? "ESS" : "IBSS");
   PRINT_DS_CHANNEL(pbody);
 #endif
         return ret;
@@ -808,10 +816,7 @@ int print_radiotap_field(struct cpack_state *s, u_int32_t bit, u_int8_t *flags)
     rc = cpack_uint8(s, &u4.u8);
     break;
   default:
-    /* this bit indicates a field whose
-     * size we do not know, so we cannot
-     * proceed.  Just print the bit number.
-     */
+    // this bit indicates a field whos size we do not know, so we cannot proceed.  Just print the bit number.     
 #ifdef MODE_DEBUG
     printf("[bit %u] ", bit);
 #endif
@@ -834,25 +839,26 @@ int print_radiotap_field(struct cpack_state *s, u_int32_t bit, u_int8_t *flags)
 #endif
     break;
   case IEEE80211_RADIOTAP_RATE:
-    if (u.u8 & 0x80){
+    if (u.u8 & 0x80){    
+      
 #ifdef MODE_DEBUG
-      PRINT_HT_RATE("", u.u8, " Mb/s ");
+      PRINT_HT_RATE("", u.u8, " THIS IS IT Mb/s ");
 #endif
     }
     else{
 #ifdef MODE_DEBUG
-      PRINT_RATE("", u.u8, " Mb/s ");
+      PRINT_RATE("", u.u8, "**Mb/s ");
 #endif
     }
     break;
   case IEEE80211_RADIOTAP_DBM_ANTSIGNAL:
 #ifdef MODE_DEBUG
-    printf("%ddB signal ", u.i8);
+    printf("%ddB GOTS!! signal ", u.i8);
 #endif
     break;
   case IEEE80211_RADIOTAP_DBM_ANTNOISE:
 #ifdef MODE_DEBUG
-    printf("%ddB noise ", u.i8);
+    printf("%ddB GOTN!! noise ", u.i8);
 #endif
     break;
   case IEEE80211_RADIOTAP_DB_ANTSIGNAL:
@@ -919,7 +925,7 @@ int print_radiotap_field(struct cpack_state *s, u_int32_t bit, u_int8_t *flags)
     break;
   case IEEE80211_RADIOTAP_TSFT:
 #ifdef MODE_DEBUG
-    printf(/*% PRIu64 */"us tsft "/*, u.u64*/);
+    printf(/*% PRIu64 */" tsft "/*, u.u64*/);
 #endif
     break;
   case IEEE80211_RADIOTAP_XCHANNEL:
@@ -1038,9 +1044,6 @@ void process_packet (u_char * args, const struct pcap_pkthdr *header, const u_ch
 }
 
 
-static pthread_t signal_thread;
-static pthread_t update_thread;
-
 int instantion_pcap (char* device){
  
   checkup(device);
@@ -1079,12 +1082,73 @@ int instantion_pcap (char* device){
   pcap_close (handle);
  
 }
+
+
+static pthread_t signal_thread;
+static pthread_t update_thread;
+static pthread_mutex_t update_lock;
+#define SLEEP_PERIOD 2
+
+
+void write_update(int a){
+printf("*********************wrote update **************************\%d\n",a);
+
+}
+static void* updater(void* arg) {
+  while (1) {
+    sleep(SLEEP_PERIOD);
+    if (pthread_mutex_lock(&update_lock)) {
+      perror("Error acquiring mutex for update");
+      exit(1);
+    }
+    write_update(1);
+
+    if (pthread_mutex_unlock(&update_lock)) {
+      perror("Error unlocking update mutex");
+      exit(1);
+    }
+  }
+}
+
+static void* handle_signals(void* arg) {
+  sigset_t* signal_set = (sigset_t*)arg;
+  int signal_handled;
+  while (1) {
+    if (sigwait(signal_set, &signal_handled)) {
+      perror("Error handling signal");
+      continue;
+    }
+    if (pthread_mutex_lock(&update_lock)) {
+      perror("Error acquiring mutex for update");
+      exit(1);
+    }
+    write_update(2);
+    exit(0);
+  }
+}
+
+
 int main(int argc, char* argv[])
 {
   char *device= argv[1];
+  sigset_t signal_set;
+  sigemptyset(&signal_set);
+  sigaddset(&signal_set, SIGINT);
+  sigaddset(&signal_set, SIGTERM);
+  if (pthread_sigmask(SIG_BLOCK, &signal_set, NULL)) {
+    perror("Error calling pthread_sigmask");
+    return 1;
+  }
+  if (pthread_create(&signal_thread, NULL, handle_signals, &signal_set)) {
+    perror("Error creating signal handling thread");
+    return 1;
+  }
+
+  if (pthread_create(&update_thread, NULL, updater, NULL)) {
+    perror("Error creating updates thread");
+    return 1;
+  }
+
   instantion_pcap (device);
   return 0 ;
-
-
-
 }
