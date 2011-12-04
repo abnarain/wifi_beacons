@@ -42,6 +42,15 @@ static const int ieee80211_htrates[16] = {
 #define PRINT_HT_RATE(_sep, _r, _suf) \
   printf("%s%.1f%s", _sep, (.5 * ieee80211_htrates[(_r) & 0xf]), _suf)
 
+
+#define PRINT_SSID(p) \
+  if (p.ssid_present) { \
+  printf(" ("); \
+  fn_print(p.ssid.ssid, NULL); \
+  printf(")"); \
+  }
+
+
 struct tok {
   int v;                  /* value */
   const char *s;          /* string */
@@ -429,3 +438,10 @@ const struct tok oui_values[] = {
   { 0, NULL }
 };
 
+#define cpack_int8(__s, __p)    cpack_uint8((__s),  (u_int8_t*)(__p))
+
+int cpack_init(struct cpack_state *, u_int8_t *, size_t);
+int cpack_uint8(struct cpack_state *, u_int8_t *);
+int cpack_uint16(struct cpack_state *, u_int16_t *);
+int cpack_uint32(struct cpack_state *, u_int32_t *);
+int cpack_uint64(struct cpack_state *, u_int64_t *);

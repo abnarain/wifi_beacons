@@ -23,7 +23,7 @@
 #include "ieee80211.h"
 #include "tcpdump.h"
 #include <ctype.h>
-
+#include "create-interface.h"
 //#define MODE_DEBUG 0
 
 static inline struct enamemem *
@@ -1052,7 +1052,7 @@ int main(int argc, char* argv[])
   char *device= argv[1];
   pcap_t *handle;  
   char *filter = "type mgt subtype beacon"; //the awesome one liner
-
+  checkup(device);
 
   if (device == NULL) {
       device = pcap_lookupdev (errbuf); 
