@@ -188,7 +188,6 @@ void print_chaninfo(int freq, int flags)
         printf(" ");
 
 
-
 }
 
 

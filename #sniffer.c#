@@ -55,7 +55,8 @@ struct r_packet {
   char channel_info[5];
   u_int8_t cap_privacy ;
   int cap_ess_ibss ;
-};
+} ;
+
 
 static inline struct enamemem * lookup_emem(const u_char *ep)
 {
@@ -660,7 +661,6 @@ void PRINT_RATE(char* _sep,  u_int8_t _r, char* _suf,struct r_packet * paket ) {
 #endif
   paket->rate= (.5 * ((_r) & 0x7f));
 }
-
 //call to this function is commented out 
 void PRINT_RATES(struct mgmt_body_t p, struct r_packet* paket) {
   if (p.rates_present) {
@@ -685,7 +685,7 @@ void PRINT_DS_CHANNEL( struct mgmt_body_t  p, struct r_packet* paket){
 #ifdef MODE_DEBUG
   printf("%s ", CAPABILITY_PRIVACY(p.capability_info) ? ", PRIVACY" : "" );
 #endif
-  paket->cap_privacy=  CAPABILITY_PRIVACY(p.capability_info) ? 1 :0 ;
+  paket->cap_privacy=  CAPABILITY_PRIVACY(p.capability_info) ? 0 :1 ;
 }
 
 int handle_beacon(const u_char *p, u_int length, struct r_packet * paket)
@@ -799,6 +799,7 @@ u_int ieee802_11_print(const u_char *p, u_int length, u_int orig_caplen, int pad
   
   return hdrlen;
 }
+
 
 int print_radiotap_field(struct cpack_state *s, u_int32_t bit, u_int8_t *flags, struct r_packet* paket)
 {

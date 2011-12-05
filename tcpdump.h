@@ -1,3 +1,4 @@
+
 #define IEEE802_11_TSTAMP_LEN           8
 #define IEEE802_11_BCNINT_LEN           2
 #define IEEE802_11_CAPINFO_LEN          2
@@ -229,53 +230,9 @@ struct mgmt_body_t {
         (IS_CHAN_PUREG(flags) || IS_CHAN_G(flags))
 
 
-/*
-#define EXTRACT_LE_32BITS(p) \
-  ((u_int32_t)((u_int32_t)*((const u_int8_t *)(p) + 3) << 24 | \
-  (u_int32_t)*((const u_int8_t *)(p) + 2) << 16 | \
-  (u_int32_t)*((const u_int8_t *)(p) + 1) << 8 | \
-	       (u_int32_t)*((const u_int8_t *)(p) + 0)))
-
-#define EXTRACT_64BITS(p) \
-  ((u_int64_t)((u_int64_t)*((const u_int8_t *)(p) + 0) << 56 | \
-  (u_int64_t)*((const u_int8_t *)(p) + 1) << 48 | \
-  (u_int64_t)*((const u_int8_t *)(p) + 2) << 40 | \
-  (u_int64_t)*((const u_int8_t *)(p) + 3) << 32 | \
-  (u_int64_t)*((const u_int8_t *)(p) + 4) << 24 | \
-  (u_int64_t)*((const u_int8_t *)(p) + 5) << 16 | \
-  (u_int64_t)*((const u_int8_t *)(p) + 6) << 8 | \
-	       (u_int64_t)*((const u_int8_t *)(p) + 7)))
-
-
-#define EXTRACT_LE_64BITS(p) \
-  ((u_int64_t)((u_int64_t)*((const u_int8_t *)(p) + 7) << 56 | \
-  (u_int64_t)*((const u_int8_t *)(p) + 6) << 48 | \
-  (u_int64_t)*((const u_int8_t *)(p) + 5) << 40 | \
-  (u_int64_t)*((const u_int8_t *)(p) + 4) << 32 | \
-  (u_int64_t)*((const u_int8_t *)(p) + 3) << 24 | \
-  (u_int64_t)*((const u_int8_t *)(p) + 2) << 16 | \
-  (u_int64_t)*((const u_int8_t *)(p) + 1) << 8 | \
-	       (u_int64_t)*((const u_int8_t *)(p) + 0)))
-
-*/
-
 #ifdef LBL_ALIGN
 
 #ifdef HAVE___ATTRIBUTE__
-/*
- * We have __attribute__; we assume that means we have __attribute__((packed)).
- * Declare packed structures containing a u_int16_t and a u_int32_t,
- * cast the pointer to point to one of those, and fetch through it;
- * the GCC manual doesn't appear to explicitly say that
- * __attribute__((packed)) causes the compiler to generate unaligned-safe
- * code, but it apppears to do so.
- *
- * We do this in case the compiler can generate, for this instruction set,
- * better code to do an unaligned load and pass stuff to "ntohs()" or
- * "ntohl()" than the code to fetch the bytes one at a time and
- * assemble them.  (That might not be the case on a little-endian platform,
- * where "ntohs()" and "ntohl()" might not be done inline.)
- */
 typedef struct {
         u_int16_t       val;
 } __attribute__((packed)) unaligned_u_int16_t;
@@ -370,8 +327,6 @@ struct cpack_state {
 
 unsigned char *snapend;
 
-
-
 #define OUI_ENCAP_ETHER 0x000000        /* encapsulated Ethernet */
 #define OUI_CISCO       0x00000c        /* Cisco protocols */
 #define OUI_NORTEL      0x000081        /* Nortel SONMP */
@@ -385,8 +340,6 @@ unsigned char *snapend;
 #define OUI_IEEE_8021_PRIVATE 0x0080c2      /* IEEE 802.1 Organisation Specific - Annex F */
 #define OUI_IEEE_8023_PRIVATE 0x00120f      /* IEEE 802.3 Organisation Specific - Annex G */
 #define OUI_TIA         0x0012bb        /* TIA - Telecommunications Industry Association - ANSI/TIA-1057- 2006 */
-
-
 
 /* Find the hash node that corresponds the ether address 'ep' */
 const struct tok oui_values[] = {
