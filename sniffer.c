@@ -38,7 +38,7 @@ struct r_packet {
   u_int8_t db_noise;
   int8_t dbm_sig;
   int8_t dbm_noise;
-  u_int8_t rate;
+  u_int8_t rate; // check if this is float
   u_int8_t antenna;
 
   int bad_fcs_err;
@@ -48,15 +48,17 @@ struct r_packet {
   int cfp_err ;
   int retry ;
   u_int8_t channel;
+
   int strictly_ordered;
   int pwr_mgmt;
   int wep_enc;
   int more_frag;
   char channel_info[5];
+
   u_int8_t cap_privacy ;
   int cap_ess_ibss ;
 };
-
+static const char hex[] = "0123456789abcdef";
 static inline struct enamemem * lookup_emem(const u_char *ep)
 {
   register u_int i, j, k;
@@ -85,8 +87,7 @@ static inline struct enamemem * lookup_emem(const u_char *ep)
   return tp;
 }
 
-const char * tok2strbuf(register const struct tok *lp, register const char *fmt,
-           register int v, char *buf, size_t bufsize)
+const char * tok2strbuf(register const struct tok *lp, register const char *fmt, register int v, char *buf, size_t bufsize)
 {
   if (lp != NULL) {
     while (lp->s != NULL) {
@@ -113,8 +114,6 @@ const char * tok2str(register const struct tok *lp, register const char *fmt,
   idx = (idx+1) & 3;
   return tok2strbuf(lp, fmt, v, ret, sizeof(buf[0]));
 }
-static const char hex[] = "0123456789abcdef";
-
 
 const char * etheraddr_string(register const u_char *ep)
 {
@@ -172,8 +171,6 @@ void mgmt_header_print(const u_char *p, const u_int8_t **srcp,  const u_int8_t *
 	   etheraddr_string((hp)->bssid), etheraddr_string((hp)->da),
 	   etheraddr_string((hp)->sa));
 #endif
-    
-
 }
 
 void print_chaninfo(int freq, int flags, struct r_packet * paket)
@@ -455,8 +452,7 @@ int cpack_uint64(struct cpack_state *cs, u_int64_t *u)
   cs->c_next = next + sizeof(*u);
   return 0;
 }
-
-
+//========================================================
 
 int parse_elements(struct mgmt_body_t *pbody, const u_char *p, int offset,u_int length)
 {
@@ -1076,79 +1072,6 @@ u_int ieee802_11_radio_print(const u_char *p, u_int length, u_int caplen, struct
 #undef BIT
 }
 
-void process_packet (u_char * args, const struct pcap_pkthdr *header, const u_char * packet)
-{
-  snapend = packet+ header->caplen; 
-  struct r_packet paket ; 
-  memset(&paket,0,sizeof(paket));
-  ieee802_11_radio_print(packet, header->len, header->caplen,&paket);
-  printf("\npacket has signal %d\n",paket.dbm_sig) ;
-  printf("MAC: **%s** \n",paket.mac_address);
-  printf("essid: %s \n" ,paket.essid) ;
-  printf("freq %u \n", paket.freq) ;
-  printf("db sig %u \n", paket.db_sig);
-  printf("db_noise %u \n",paket.db_noise);
-  printf("dbm sig %d \n", paket.dbm_sig);
-  printf("dbm noise %d \n", paket.dbm_noise);
-  printf("rate %u \n ", paket.rate);
-  printf("antenna %u \n ", paket.antenna);
-  printf("fcs %u \n", paket.bad_fcs_err);
- 
-  // printf("sh pr %u \n",paket.short_preamble_err);
-  // printf("wep err %u \n",paket.radiotap_wep_err);
-  // printf("frag %u \n",paket.frag_err);
-  // printf("cfp %u \n",paket.cfp_err) ;
-  printf("bssid_cap %d\n",paket.cap_ess_ibss);  
-  printf("privacy flag %d \n",paket.cap_privacy );
-  printf("channel: %u \n",paket.channel);
-  //printf("str ordered %d \n",paket.strictly_ordered);
-  //printf("pw mgmt %d \n",paket.pwr_mgmt);
-  printf("chan info *%s* \n",paket.channel_info);
-
-
-
-  
-#ifdef MODE_DEBUG
-  printf("\n------------------------------------\n");
-#endif
-}
-
-int instantiating_pcap (char* device){
-  checkup(device);
-  char errbuf[PCAP_ERRBUF_SIZE]; 
-  bpf_u_int32 netp;   
-  bpf_u_int32 maskp;  
-  struct bpf_program fp; 
-  int r;  
-  pcap_t *handle;
-  
-  char *filter = "type mgt subtype beacon"; //the awesome one liner
-  
-  
-  if (device == NULL) {
-    device = pcap_lookupdev (errbuf); 
-    if (device == NULL){  printf ("%s", errbuf); exit (1);}
-  }
-  handle = pcap_open_live (device, BUFSIZ,1,0,errbuf); 
-  if (handle == NULL) { fprintf (stderr, "%s", errbuf);
-    exit (1);
-  }
-  if (pcap_compile (handle, &fp, filter, 0, maskp) == -1){
-      fprintf (stderr, "Compile: %s\n", pcap_geterr (handle)); exit (1);
-  }
-  
-  if (pcap_setfilter (handle, &fp) == -1){
-    fprintf (stderr, "Setfilter: %s", pcap_geterr (handle)); exit (1);
-  }
-  pcap_freecode (&fp);
-  
-  if ((r = pcap_loop(handle, -1, process_packet, NULL)) < 0){
-    if (r == -1){  fprintf (stderr, "Loop: %s", pcap_geterr (handle)); exit (1);
-    } // -2 : breakoff from pcap loop
-  }
-  pcap_close (handle);
-  return 0 ;
-}
 
 static pthread_t signal_thread;
 static pthread_t update_thread;
@@ -1192,6 +1115,150 @@ static void* handle_signals(void* arg) {
   }
 }
 
+typedef struct {
+  char mac_add[18];
+  char essid[48];
+  int packet_count;
+  int count_fcs;
+  int count_short_preamble;
+  float total_signal;
+  float total_noise;
+  float avg_rate; 
+} address_table_entry_t;
+
+#define MAC_TABLE_ENTRIES 127
+
+typedef struct {
+  /* A list of MAC mappings. A mapping ID is simply
+   * that mapping's index offset into this array. */
+  address_table_entry_t entries[MAC_TABLE_ENTRIES];
+  /* The index of the first (i.e., oldest) mapping in the list */
+  int first;
+  /* The index of the last (i.e., newest) mapping in the list */
+  int last;
+  int length;
+  /* The index of the last mapping sent to the server. */
+  int added_since_last_update;
+} address_table_t;
+
+address_table_t address_table;
+
+void address_table_init(address_table_t* table) {
+  memset(table, '\0', sizeof(*table));
+}
+#define MODULUS(m, d)  ((((m) % (d)) + (d)) % (d))
+#define NORM(m)  (MODULUS(m, MAC_TABLE_ENTRIES))
+
+int address_table_lookup(address_table_t*  table,struct r_packet* paket) {
+  char m_address[sizeof(paket->mac_address)];
+  printf("i am in lookup %s\n", paket->mac_address);
+  memcpy(m_address,paket->mac_address,sizeof(paket->mac_address));
+  printf("after memcpy\n");
+  if (table->length > 0) {
+    /* Search table starting w/ most recent MAC addresses. */
+    int idx;
+    printf("inside checking\n");
+    for (idx = 0; idx < table->length; ++idx) {
+      int mac_id = NORM(table->last - idx);
+      if (!memcmp(table->entries[mac_id].mac_add, m_address, sizeof(m_address))) {
+	table->entries[mac_id].packet_count++;
+	printf("\nsignal is %d ",table->entries[mac_id].total_signal);
+        printf("mac: %s \n",m_address);
+	printf("pkt count=%d\n", table->entries[mac_id].packet_count);
+        return mac_id;
+      }
+    }
+  }
+  if (table->length == MAC_TABLE_ENTRIES) {
+    /* Discard the oldest MAC address. */
+    table->first = NORM(table->first + 1);
+  } else {
+    ++table->length;
+  }
+  if (table->length > 1) {
+    table->last = NORM(table->last + 1);
+  }
+  printf("in lookup \n");
+  table->entries[table->last].total_signal =table->entries[table->last].total_signal +paket->dbm_sig ;
+  table->entries[table->last].packet_count =  table->entries[table->last].packet_count+1;
+  memcpy(table->entries[table->last].mac_add, m_address, sizeof(m_address));
+  if (table->added_since_last_update < MAC_TABLE_ENTRIES) {
+    ++table->added_since_last_update;
+  }
+  return table->last;
+}
+void process_packet (u_char * args, const struct pcap_pkthdr *header, const u_char * packet)
+{
+  snapend = packet+ header->caplen; 
+  struct r_packet paket ; 
+  memset(&paket,0,sizeof(paket));
+  ieee802_11_radio_print(packet, header->len, header->caplen,&paket);
+  printf("\npacket has signal %d\n",paket.dbm_sig) ;
+  printf("MAC: **%s** \n",paket.mac_address);
+  printf("essid: %s \n" ,paket.essid) ;
+  printf("freq %u \n", paket.freq) ;
+  printf("db sig %u \n", paket.db_sig);
+  printf("db_noise %u \n",paket.db_noise);
+  printf("dbm sig %d \n", paket.dbm_sig);
+  printf("dbm noise %d \n", paket.dbm_noise);
+  printf("rate %u \n ", paket.rate);
+  //printf("antenna %u \n ", paket.antenna);
+  printf("fcs %u \n", paket.bad_fcs_err);
+ 
+  // printf("sh pr %u \n",paket.short_preamble_err);
+  // printf("wep err %u \n",paket.radiotap_wep_err);
+  // printf("frag %u \n",paket.frag_err);
+  // printf("cfp %u \n",paket.cfp_err) ;
+  printf("bssid_cap %d\n",paket.cap_ess_ibss);  
+  printf("privacy flag %d \n",paket.cap_privacy );
+  printf("channel: %u \n",paket.channel);
+  //printf("str ordered %d \n",paket.strictly_ordered);
+  //printf("pw mgmt %d \n",paket.pwr_mgmt);
+  printf("chan info *%s* \n",paket.channel_info);
+  
+  address_table_lookup(&address_table,&paket);
+
+  
+#ifdef MODE_DEBUG
+  printf("\n------------------------------------\n");
+#endif
+}
+
+
+int instantiating_pcap (char* device){
+  checkup(device);
+  char errbuf[PCAP_ERRBUF_SIZE]; 
+  bpf_u_int32 netp;   
+  bpf_u_int32 maskp;  
+  struct bpf_program fp; 
+  int r;  
+  pcap_t *handle;
+  char *filter = "type mgt subtype beacon"; //the awesome one liner
+  address_table_init(&address_table);
+  if (device == NULL) {
+    device = pcap_lookupdev (errbuf); 
+    if (device == NULL){  printf ("%s", errbuf); exit (1);}
+  }
+  handle = pcap_open_live (device, BUFSIZ,1,0,errbuf); 
+  if (handle == NULL) { fprintf (stderr, "%s", errbuf);
+    exit (1);
+  }
+  if (pcap_compile (handle, &fp, filter, 0, maskp) == -1){
+      fprintf (stderr, "Compile: %s\n", pcap_geterr (handle)); exit (1);
+  }
+  
+  if (pcap_setfilter (handle, &fp) == -1){
+    fprintf (stderr, "Setfilter: %s", pcap_geterr (handle)); exit (1);
+  }
+  pcap_freecode (&fp);
+  
+  if ((r = pcap_loop(handle, -1, process_packet, NULL)) < 0){
+    if (r == -1){  fprintf (stderr, "Loop: %s", pcap_geterr (handle)); exit (1);
+    } // -2 : breakoff from pcap loop
+  }
+  pcap_close (handle);
+  return 0 ;
+}
 
 int main(int argc, char* argv[])
 {
@@ -1208,7 +1275,6 @@ int main(int argc, char* argv[])
     perror("Error creating signal handling thread");
     return 1;
   }
-
   if (pthread_create(&update_thread, NULL, updater, NULL)) {
     perror("Error creating updates thread");
     return 1;
