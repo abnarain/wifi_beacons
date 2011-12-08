@@ -26,21 +26,49 @@
 #include "util.h"
 #include "ieee80211_radiotap.h"
 #include "ieee80211.h"
-#include "td-util.h"
+#include "tcpdump.h"
 #include "create-interface.h"
-#include "pkts.h"
 #define FILE_UPDATED "/tmp/sniffer/update.gz"
 #define BISMARK_ID_FILENAME "/etc/bismark/ID"
 #define PENDING_UPDATE_FILENAME "/tmp/sniffer/current-update.gz"
 static char bismark_id[256];
 
 
-int SLEEP_PERIOD =60 ;
+#define SLEEP_PERIOD 60
 //#define MODE_DEBUG 0
 
 static pthread_t signal_thread;
 static pthread_t update_thread;
 static pthread_mutex_t update_lock;
+
+struct r_packet {
+  char mac_address[18];
+  char essid[48] ;
+  u_int16_t  freq ;
+  u_int8_t db_sig;
+  u_int8_t db_noise;
+  int8_t dbm_sig;
+  int8_t dbm_noise;
+  u_int8_t rate; // check if this is float
+  u_int8_t antenna;
+
+  int bad_fcs_err;
+  int short_preamble_err;
+  int radiotap_wep_err;
+  int frag_err;
+  int cfp_err ;
+  int retry ;
+  u_int8_t channel;
+
+  int strictly_ordered;
+  int pwr_mgmt;
+  int wep_enc;
+  int more_frag;
+  char channel_info[5];
+
+  u_int8_t cap_privacy ;
+  int cap_ess_ibss ;
+};
 static const char hex[] = "0123456789abcdef";
 static inline struct enamemem * lookup_emem(const u_char *ep)
 {
@@ -241,7 +269,8 @@ void print_chaninfo(int freq, int flags, struct r_packet * paket)
   
 }
 
-void ieee_802_11_hdr_print(u_int16_t fc, const u_char *p, u_int hdrlen, const u_int8_t **srcp, const u_int8_t **dstp, struct r_packet *paket)
+void ieee_802_11_hdr_print(u_int16_t fc, const u_char *p, u_int hdrlen,
+			    const u_int8_t **srcp, const u_int8_t **dstp, struct r_packet *paket)
 {
   int vflag;
   vflag=1;
@@ -256,19 +285,19 @@ void ieee_802_11_hdr_print(u_int16_t fc, const u_char *p, u_int hdrlen, const u_
     if (FC_POWER_MGMT(fc)){
       paket->pwr_mgmt=1;
 #ifdef MODE_DEBUG
-      printf("PM");
+      printf("Pwr Mgmt ");
 #endif
 }
     if (FC_RETRY(fc)){
       paket->retry=1;
 #ifdef MODE_DEBUG
-      printf("R ");
+      printf("Retry ");
 #endif
 }
     if (FC_ORDER(fc)){
       paket->strictly_ordered=1;
 #ifdef MODE_DEBUG
-      printf("SO ");
+      printf("Strictly Ordered ");
 #endif
 }
     if (FC_WEP(fc)){
@@ -1051,6 +1080,61 @@ u_int ieee802_11_radio_print(const u_char *p, u_int length, u_int caplen, struct
 }
 
 
+
+typedef struct {
+  char mac_add[18];
+  char essid[48];
+
+  int packet_count;
+
+  int bad_fcs_err_count;
+  int short_preamble_err_count;
+  int radiotap_wep_err_count;
+  int retry_count;
+  int cfp_err_count ;
+  int frag_err_count ;
+  int retry_err_count;
+  int strictly_ordered_err;
+
+  int8_t dbm_signal_sum;
+  int8_t dbm_noise_sum;
+  
+  u_int8_t db_signal_sum;
+  u_int8_t db_noise_sum;
+
+  u_int8_t channel;
+  u_int8_t antenna; 
+  
+  u_int16_t freq;
+  u_int8_t rate;
+
+  int pwr_mgmt_count;
+  int wep_enc_count;
+  int more_frag_count;
+  char channel_info[5];
+
+  u_int8_t cap_privacy ;
+  u_int8_t cap_ess_ibss ;
+
+} address_table_entry_t;
+
+#define MAC_TABLE_ENTRIES 127
+
+typedef struct {
+  /* A list of MAC mappings. A mapping ID is simply
+   * that mapping's index offset into this array. */
+  address_table_entry_t entries[MAC_TABLE_ENTRIES];
+  /* The index of the first (i.e., oldest) mapping in the list */
+  int first;
+  /* The index of the last (i.e., newest) mapping in the list */
+  int last;
+  int length;
+  /* The index of the last mapping sent to the server. */
+  int added_since_last_update;
+} address_table_t;
+
+address_table_t address_table;
+
 void address_table_init(address_table_t* table) {
   memset(table, '\0', sizeof(*table));
 }
@@ -1059,7 +1143,7 @@ void address_table_init(address_table_t* table) {
 
 int address_table_lookup(address_table_t*  table,struct r_packet* paket) {
   char m_address[sizeof(paket->mac_address)];
-  // printf("i am in lookup %s\n", paket->mac_address);
+  //  printf("i am in lookup %s\n", paket->mac_address);
   memcpy(m_address,paket->mac_address,sizeof(paket->mac_address));
   if (table->length > 0) {
     /* Search table starting w/ most recent MAC addresses. */
@@ -1067,7 +1151,7 @@ int address_table_lookup(address_table_t*  table,struct r_packet* paket) {
     for (idx = 0; idx < table->length; ++idx) {
       int mac_id = NORM(table->last - idx);
       if (!memcmp(table->entries[mac_id].mac_add, m_address, sizeof(m_address))) {
-	//memcpy(table->entries[mac_id].mac_add, m_address, sizeof(m_address));
+	memcpy(table->entries[mac_id].mac_add, m_address, sizeof(m_address));
 	table->entries[mac_id].packet_count++;
 	if(paket->bad_fcs_err)
 	  table->entries[mac_id].bad_fcs_err_count++;
@@ -1081,6 +1165,7 @@ int address_table_lookup(address_table_t*  table,struct r_packet* paket) {
 	  table->entries[mac_id].cfp_err_count++ ;
 	if(paket->retry)
 	  table->entries[mac_id].retry_err_count++; 
+
 	if(paket->strictly_ordered)
 	  table->entries[mac_id].strictly_ordered_err=paket->strictly_ordered;
 	if(paket->pwr_mgmt)
@@ -1094,13 +1179,9 @@ int address_table_lookup(address_table_t*  table,struct r_packet* paket) {
 	
 	table->entries[mac_id].dbm_noise_sum =	table->entries[table->last].dbm_noise_sum + paket->dbm_noise ;
 	table->entries[mac_id].dbm_signal_sum =	table->entries[table->last].dbm_signal_sum + paket->dbm_sig ;
-	memcpy(table->entries[mac_id].essid, paket->essid, sizeof(paket->essid));
-	memcpy(table->entries[mac_id].mac_add, m_address, sizeof(m_address));
-	if(table->entries[mac_id].mac_add==NULL)
-	  printf("mac address is null for %s \n", paket->essid );
-	if(table->entries[table->last].essid==NULL)
-	  printf("essid is null for %s \n", paket->mac_address );
-	printf("\nsignal is %d \n",table->entries[mac_id].dbm_signal_sum);
+	memcpy(table->entries[table->last].essid, paket->essid, sizeof(paket->essid));
+	memcpy(table->entries[table->last].mac_add, m_address, sizeof(m_address));
+	//	printf("\nsignal is %d \n",table->entries[mac_id].dbm_signal_sum);
 	//printf("pkt count=%d, mac_id=%d\n", table->entries[mac_id].packet_count,mac_id);
 	//printf("mac->%s\n------\n",table->entries[mac_id].mac_add);
         return mac_id;
@@ -1116,12 +1197,7 @@ int address_table_lookup(address_table_t*  table,struct r_packet* paket) {
   if (table->length > 1) {
     table->last = NORM(table->last + 1);
   }
-    if(table->entries[table->last].essid==NULL)
-      printf("essid is null for %s \n", paket->mac_address );
-    memcpy(table->entries[table->last].essid, paket->essid, sizeof(paket->essid));
-     if(table->entries[table->last].mac_add==NULL)
-       printf("mac address is null for %s \n", paket->essid );
-    memcpy(table->entries[table->last].mac_add, paket->mac_address, sizeof(m_address));
+
   table->entries[table->last].packet_count =  table->entries[table->last].packet_count+1;
 
   table->entries[table->last].db_signal_sum=paket->db_sig; 
@@ -1158,7 +1234,8 @@ int address_table_lookup(address_table_t*  table,struct r_packet* paket) {
   return table->last;
 }
 
-static int initialize_bismark_id() {  
+static int initialize_bismark_id() {
+  
   FILE* handle = fopen(BISMARK_ID_FILENAME, "r");
   if (!handle) {
     perror("Cannot open Bismark ID file " BISMARK_ID_FILENAME);
@@ -1181,8 +1258,8 @@ int address_table_write_update(address_table_t* table,gzFile handle) {
   int idx;
   for (idx = table->added_since_last_update; idx > 0; --idx) {
     int mac_id = NORM(table->last - idx + 1);
-//#if 0
-    printf("%s:%s:privacy%u:ibss%u:f%u:c%u:%s:r%u",table->entries[mac_id].mac_add,
+    //#if 0
+    printf("%s:%s:p%u:ibss%u:f%u:c%u:%s:r%u",table->entries[mac_id].mac_add,
 	   table->entries[mac_id].essid, 
 	   table->entries[mac_id].cap_privacy,
 	   table->entries[mac_id].cap_ess_ibss, 
@@ -1207,8 +1284,7 @@ int address_table_write_update(address_table_t* table,gzFile handle) {
 	  table->entries[mac_id].db_noise_sum,	
 	  table->entries[mac_id].dbm_noise_sum ,
 	  table->entries[mac_id].dbm_signal_sum);
-//#endif
-//#if 0
+   //#endif
    if(!gzprintf(handle,"%s:%s:%u:ibss%u:f%u:c%u:%s:r%u",table->entries[mac_id].mac_add,
 	   table->entries[mac_id].essid, 
 	   table->entries[mac_id].cap_privacy,
@@ -1240,14 +1316,14 @@ int address_table_write_update(address_table_t* table,gzFile handle) {
      perror("error writing the zip file");
      exit(0);
    }
-   //#endif    
+    
   }
   
 
 }
 
 void write_update(){
-printf("*********************wrote update **************************\n");
+printf("*********************wrote update **************************\%d\n");
 
 gzFile handle = gzopen (PENDING_UPDATE_FILENAME, "wb");
  if (!handle) {
@@ -1329,9 +1405,7 @@ void process_packet (u_char * args, const struct pcap_pkthdr *header, const u_ch
   printf("chan info *%s* \n",paket.channel_info);
   
 #endif
-
   address_table_lookup(&address_table,&paket);
-
 #ifdef MODE_DEBUG
   printf("\n------------------------------------\n");
 #endif
