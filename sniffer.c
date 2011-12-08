@@ -614,8 +614,9 @@ int parse_elements(struct mgmt_body_t *pbody, const u_char *p, int offset,u_int 
 void PRINT_HT_RATE(char* _sep,  u_int8_t _r, char* _suf,struct r_packet * paket){
 #ifdef MODE_DEBUG
   printf("  %s%.1f%s ", _sep, (.5 * ieee80211_htrates[(_r) & 0xf]), _suf);
-#endif
+#endif  
   paket->rate=(.5 * ieee80211_htrates[(_r) & 0xf]);
+  
 }
 
 void PRINT_SSID( struct mgmt_body_t p,struct r_packet* paket){ 
@@ -629,11 +630,14 @@ void PRINT_SSID( struct mgmt_body_t p,struct r_packet* paket){
 #endif
   }
 }
+
 void PRINT_RATE(char* _sep,  u_int8_t _r, char* _suf,struct r_packet * paket ) {
 #ifdef MODE_DEBUG
   printf("  %s%2.1f%s ", _sep, (.5 * ((_r) & 0x7f)), _suf);
 #endif
-  paket->rate= (.5 * ((_r) & 0x7f));
+  //  printf("**%2.1f**",(.5 * ((_r) & 0x7f)));
+	 paket->rate= (.5 * ((_r) & 0x7f));
+	 //	 printf("rate **%2.1f**\n", paket->rate);
 }
 
 //call to this function is commented out 
@@ -691,10 +695,12 @@ int handle_beacon(const u_char *p, u_int length, struct r_packet * paket)
   
   PRINT_SSID(pbody,paket);
   PRINT_DS_CHANNEL(pbody,paket);
+  
 #ifdef MODE_DEBUG
-   PRINT_RATES(pbody,paket);
+  PRINT_RATES(pbody,paket);
   printf(" %s",	 CAPABILITY_ESS(pbody.capability_info) ? "ESS" : "IBSS");
 #endif
+  paket->cap_ess_ibss =55;
   paket->cap_ess_ibss=  CAPABILITY_ESS(pbody.capability_info) ? 1:2;
   return ret;
 }
@@ -858,15 +864,15 @@ int print_radiotap_field(struct cpack_state *s, u_int32_t bit, u_int8_t *flags, 
   case IEEE80211_RADIOTAP_RATE:
     if (u.u8 & 0x80){    
       //paket->rate=u.u8;
-#ifdef MODE_DEBUG
+      //#ifdef MODE_DEBUG
       PRINT_HT_RATE("", u.u8, "Mb/s ",paket);
-#endif
+      //#endif
     }
-    else{
+    else{    
       // paket->rate=u.u8;
-#ifdef MODE_DEBUG
+      //#ifdef MODE_DEBUG
       PRINT_RATE("", u.u8, "Mb/s ",paket);
-#endif
+      //#endif
     }
     break;
   case IEEE80211_RADIOTAP_DBM_ANTSIGNAL:
@@ -1090,19 +1096,38 @@ int address_table_lookup(address_table_t*  table,struct r_packet* paket) {
 	if(paket->more_frag)
 	  table->entries[mac_id].more_frag_count++;
 	table->entries[mac_id].db_signal_sum = 	table->entries[table->last].db_signal_sum+ paket->db_sig; 
+
 	table->entries[mac_id].db_noise_sum= 	table->entries[table->last].db_noise_sum +paket->db_noise;
 	
 	table->entries[mac_id].dbm_noise_sum =	table->entries[table->last].dbm_noise_sum + paket->dbm_noise ;
-	table->entries[mac_id].dbm_signal_sum =	table->entries[table->last].dbm_signal_sum + paket->dbm_sig ;
+
+	printf("\n mac_add : %s init sig is %f , add positive of %i ",table->entries[mac_id].mac_add, 
+	       table->entries[mac_id].dbm_signal_sum, paket->dbm_sig);
+
+	float temp_sig; 
+	temp_sig = -1* paket->dbm_sig ;
+	printf(" positive is =%d", temp_sig) ;
+	
+	float temp_sum ;
+	temp_sum= -1 * table->entries[table->last].dbm_signal_sum ;
+	
+	table->entries[mac_id].dbm_signal_sum = 0;	
+	int x = 0;
+	x=temp_sig + temp_sum;
+	printf("\nx=%d\n",x );
+	table->entries[mac_id].dbm_signal_sum =x;
+
+	printf("sig after %f \n",table->entries[mac_id].dbm_signal_sum) ;
 	memcpy(table->entries[mac_id].essid, paket->essid, sizeof(paket->essid));
+
 	memcpy(table->entries[mac_id].mac_add, m_address, sizeof(m_address));
 	if(table->entries[mac_id].mac_add==NULL)
 	  printf("mac address is null for %s \n", paket->essid );
 	if(table->entries[table->last].essid==NULL)
 	  printf("essid is null for %s \n", paket->mac_address );
-	printf("\nsignal is %d \n",table->entries[mac_id].dbm_signal_sum);
-	//printf("pkt count=%d, mac_id=%d\n", table->entries[mac_id].packet_count,mac_id);
-	//printf("mac->%s\n------\n",table->entries[mac_id].mac_add);
+	
+	printf("pkt count=%d \n", table->entries[mac_id].packet_count,mac_id);
+	//printf("pkt count=%d, mac_id=%d\n", table->entries[mac_id].packet_count,mac_id);	
         return mac_id;
       }
     }
@@ -1181,7 +1206,7 @@ int address_table_write_update(address_table_t* table,gzFile handle) {
   int idx;
   for (idx = table->added_since_last_update; idx > 0; --idx) {
     int mac_id = NORM(table->last - idx + 1);
-//#if 0
+#if 0
     printf("%s:%s:privacy%u:ibss%u:f%u:c%u:%s:r%u",table->entries[mac_id].mac_add,
 	   table->entries[mac_id].essid, 
 	   table->entries[mac_id].cap_privacy,
@@ -1191,7 +1216,7 @@ int address_table_write_update(address_table_t* table,gzFile handle) {
 	   table->entries[mac_id].channel_info, 
 	   table->entries[mac_id].rate);
     
-   printf("pc%d:bfs%d:sp%d:wep%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:noise%d:sig%d\n",
+   printf("pc%d:bfs%d:sp%d:wep%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:noise%d:sig%f\n",
 	  table->entries[mac_id].packet_count,
 	  table->entries[mac_id].bad_fcs_err_count,
 	  table->entries[mac_id].short_preamble_err_count,
@@ -1207,6 +1232,9 @@ int address_table_write_update(address_table_t* table,gzFile handle) {
 	  table->entries[mac_id].db_noise_sum,	
 	  table->entries[mac_id].dbm_noise_sum ,
 	  table->entries[mac_id].dbm_signal_sum);
+#endif   
+   printf("**%s %f %d %f**\n", table->entries[mac_id].mac_add, table->entries[mac_id].dbm_signal_sum,table->entries[mac_id].packet_count,
+ 	  table->entries[mac_id].dbm_signal_sum/ table->entries[mac_id].packet_count);
 //#endif
 //#if 0
    if(!gzprintf(handle,"%s:%s:%u:ibss%u:f%u:c%u:%s:r%u",table->entries[mac_id].mac_add,

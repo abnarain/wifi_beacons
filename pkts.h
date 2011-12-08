@@ -8,7 +8,7 @@ struct r_packet {
   u_int8_t db_noise;
   int8_t dbm_sig;
   int8_t dbm_noise;
-  u_int8_t rate; // check if this is float
+  /*u_int8_t*/ float rate; // check if this is float
   u_int8_t antenna;
 
   u_int8_t bad_fcs_err;
@@ -49,8 +49,8 @@ typedef struct {
   u_int16_t wep_enc_count;
   u_int16_t more_frag_count;
 
-  int8_t dbm_signal_sum;
-  int8_t dbm_noise_sum;
+  float dbm_signal_sum;
+  float dbm_noise_sum;
   
   u_int8_t db_signal_sum;
   u_int8_t db_noise_sum;
@@ -59,7 +59,7 @@ typedef struct {
   u_int8_t antenna; 
   
   u_int16_t freq;
-  u_int8_t rate;
+  /*u_int8_t */ float rate;
 
   char channel_info[5];
 
