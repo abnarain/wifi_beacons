@@ -1104,19 +1104,12 @@ int address_table_lookup(address_table_t*  table,struct r_packet* paket) {
 	printf("\n mac_add : %s init sig is %f , add positive of %i ",table->entries[mac_id].mac_add, 
 	       table->entries[mac_id].dbm_signal_sum, paket->dbm_sig);
 
-	float temp_sig; 
-	temp_sig = -1* paket->dbm_sig ;
-	printf(" positive is =%d", temp_sig) ;
 	
-	float temp_sum ;
-	temp_sum= -1 * table->entries[table->last].dbm_signal_sum ;
+	printf("pos signal (d)=%d \n" ,-(paket->dbm_sig));
+	printf("sig before %f \n",table->entries[mac_id].dbm_signal_sum) ;
+	printf("float of pak->sig %f \n", (float)-(paket->dbm_sig));
+	table->entries[mac_id].dbm_signal_sum =(float)-(paket->dbm_sig) + table->entries[mac_id].dbm_signal_sum ;
 	
-	table->entries[mac_id].dbm_signal_sum = 0;	
-	int x = 0;
-	x=temp_sig + temp_sum;
-	printf("\nx=%d\n",x );
-	table->entries[mac_id].dbm_signal_sum =x;
-
 	printf("sig after %f \n",table->entries[mac_id].dbm_signal_sum) ;
 	memcpy(table->entries[mac_id].essid, paket->essid, sizeof(paket->essid));
 
@@ -1153,7 +1146,7 @@ int address_table_lookup(address_table_t*  table,struct r_packet* paket) {
   table->entries[table->last].db_noise_sum=paket->db_noise;
  
   table->entries[table->last].dbm_noise_sum =paket->dbm_noise ;
-  table->entries[table->last].dbm_signal_sum =paket->dbm_sig ;
+  table->entries[table->last].dbm_signal_sum =-(paket->dbm_sig) ;
   
   //counters 
   table->entries[table->last].bad_fcs_err_count=paket->bad_fcs_err;    
