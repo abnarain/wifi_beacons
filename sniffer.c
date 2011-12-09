@@ -29,13 +29,16 @@
 #include "td-util.h"
 #include "create-interface.h"
 #include "pkts.h"
+static int sequence_number = 0;
 #define FILE_UPDATED "/tmp/sniffer/update.gz"
 #define BISMARK_ID_FILENAME "/etc/bismark/ID"
+#define UPDATE_FILENAME "/tmp/sniffer/updates/%s-%" PRIu64 "-%d.gz"
 #define PENDING_UPDATE_FILENAME "/tmp/sniffer/current-update.gz"
 static char bismark_id[256];
+static int64_t start_timestamp_microseconds;
+#define NUM_MICROS_PER_SECOND 1e6
 
-
-int SLEEP_PERIOD =60 ;
+int SLEEP_PERIOD =60 ; //default value
 //#define MODE_DEBUG 0
 
 static pthread_t signal_thread;
@@ -86,12 +89,10 @@ const char * tok2strbuf(register const struct tok *lp, register const char *fmt,
 }
 
 const char * tok2str(register const struct tok *lp, register const char *fmt,
-        register int v)
-{
+        register int v){
   static char buf[4][128];
   static int idx = 0;
   char *ret;
-
   ret = buf[idx];
   idx = (idx+1) & 3;
   return tok2strbuf(lp, fmt, v, ret, sizeof(buf[0]));
@@ -308,7 +309,7 @@ fn_print(register const u_char *s, register const u_char *ep, struct r_packet * 
   char temp[48];
   int i = 0; 
   ret = 1;                        /* assume truncated */
-  while (ep == NULL || s < ep) {
+ while (ep == NULL || s < ep) {
     c = *s++;
     if (c == '\0') {
       temp[i]=c ;
@@ -317,33 +318,34 @@ fn_print(register const u_char *s, register const u_char *ep, struct r_packet * 
     }
     if (!isascii(c)) {
       c = toascii(c);
-      temp[i]=c;
+      temp[i]='-';//c prev
+      continue; 
 #ifdef MODE_DEBUG
-      //putchar('M');
+      putchar('M');
       putchar('-');
 #endif
     }
     if (!isprint(c)) {
-      temp[i]=c;
-#ifdef MODE_DEBUG
       c ^= 0x40;      /* DEL to ?, others to alpha */
+      temp[i]='^';//c prev
+      continue; 
+#ifdef MODE_DEBUG
       putchar('^');
 #endif
     }
     temp[i]=c;
-#ifdef MODE_DEBUG
+    #ifdef MODE_DEBUG
     putchar(c);
-#endif
+    #endif
     i++;
-  }
-  //    printf("&&%s&&",temp);
+ }
+ if(ret==1)
+   temp[i]='\0';
+   printf("!!%s!!",temp);
   memcpy(paket->essid,temp, strlen(temp));
   return(ret);
 }
-
 //==============================================================
-
-
 #define cpack_int8(__s, __p)    cpack_uint8((__s),  (u_int8_t*)(__p))
 
 int cpack_init(struct cpack_state *, u_int8_t *, size_t);
@@ -610,7 +612,6 @@ int parse_elements(struct mgmt_body_t *pbody, const u_char *p, int offset,u_int 
   return 1;
 }
 
-
 void PRINT_HT_RATE(char* _sep,  u_int8_t _r, char* _suf,struct r_packet * paket){
 #ifdef MODE_DEBUG
   printf("  %s%.1f%s ", _sep, (.5 * ieee80211_htrates[(_r) & 0xf]), _suf);
@@ -624,6 +625,7 @@ void PRINT_SSID( struct mgmt_body_t p,struct r_packet* paket){
 #ifdef MODE_DEBUG   
     printf(" ( "); 
 #endif
+    
     fn_print(p.ssid.ssid, NULL,paket); 
 #ifdef MODE_DEBUG
     printf(")"); 
@@ -636,8 +638,8 @@ void PRINT_RATE(char* _sep,  u_int8_t _r, char* _suf,struct r_packet * paket ) {
   printf("  %s%2.1f%s ", _sep, (.5 * ((_r) & 0x7f)), _suf);
 #endif
   //  printf("**%2.1f**",(.5 * ((_r) & 0x7f)));
-	 paket->rate= (.5 * ((_r) & 0x7f));
-	 //	 printf("rate **%2.1f**\n", paket->rate);
+  paket->rate=(float)((.5 * ((_r) & 0x7f)));
+  
 }
 
 //call to this function is commented out 
@@ -869,11 +871,10 @@ int print_radiotap_field(struct cpack_state *s, u_int32_t bit, u_int8_t *flags, 
       //#endif
     }
     else{    
-      // paket->rate=u.u8;
-      //#ifdef MODE_DEBUG
       PRINT_RATE("", u.u8, "Mb/s ",paket);
-      //#endif
-    }
+      //  printf(" rate is %f main ", paket->rate);
+      //printf("rate **%2.1f**\n", paket->rate);
+    }    
     break;
   case IEEE80211_RADIOTAP_DBM_ANTSIGNAL:
     paket->dbm_sig=u.i8;
@@ -1066,7 +1067,9 @@ void address_table_init(address_table_t* table) {
 int address_table_lookup(address_table_t*  table,struct r_packet* paket) {
   char m_address[sizeof(paket->mac_address)];
   // printf("i am in lookup %s\n", paket->mac_address);
+  printf("Must be assci **** %s ****\n", paket->essid);
   memcpy(m_address,paket->mac_address,sizeof(paket->mac_address));
+
   if (table->length > 0) {
     /* Search table starting w/ most recent MAC addresses. */
     int idx;
@@ -1095,32 +1098,26 @@ int address_table_lookup(address_table_t*  table,struct r_packet* paket) {
 	  table->entries[mac_id].wep_enc_count++;
 	if(paket->more_frag)
 	  table->entries[mac_id].more_frag_count++;
-	table->entries[mac_id].db_signal_sum = 	table->entries[table->last].db_signal_sum+ paket->db_sig; 
+	table->entries[mac_id].db_signal_sum = table->entries[mac_id].db_signal_sum+ paket->db_sig; 
 
-	table->entries[mac_id].db_noise_sum= 	table->entries[table->last].db_noise_sum +paket->db_noise;
+	table->entries[mac_id].db_noise_sum= table->entries[mac_id].db_noise_sum +paket->db_noise;
 	
-	table->entries[mac_id].dbm_noise_sum =	table->entries[table->last].dbm_noise_sum + paket->dbm_noise ;
+	table->entries[mac_id].dbm_noise_sum =	table->entries[mac_id].dbm_noise_sum + paket->dbm_noise ;
 
-	printf("\n mac_add : %s init sig is %f , add positive of %i ",table->entries[mac_id].mac_add, 
-	       table->entries[mac_id].dbm_signal_sum, paket->dbm_sig);
-
-	
-	printf("pos signal (d)=%d \n" ,-(paket->dbm_sig));
-	printf("sig before %f \n",table->entries[mac_id].dbm_signal_sum) ;
-	printf("float of pak->sig %f \n", (float)-(paket->dbm_sig));
 	table->entries[mac_id].dbm_signal_sum =(float)-(paket->dbm_sig) + table->entries[mac_id].dbm_signal_sum ;
+	table->entries[mac_id].rate = table->entries[mac_id].rate +paket->rate ;
 	
-	printf("sig after %f \n",table->entries[mac_id].dbm_signal_sum) ;
+	//printf("sig after %2.1f \n",table->entries[mac_id].dbm_signal_sum) ;
+#if 0
+	printf("Before essid  %s,  %s \n",table->entries[mac_id].essid,paket->essid);
+	printf("mac address  %s \n",table->entries[mac_id].mac_add);
+	printf("pkt count=%d,\n", table->entries[mac_id].packet_count);
+#endif	
 	memcpy(table->entries[mac_id].essid, paket->essid, sizeof(paket->essid));
-
 	memcpy(table->entries[mac_id].mac_add, m_address, sizeof(m_address));
-	if(table->entries[mac_id].mac_add==NULL)
-	  printf("mac address is null for %s \n", paket->essid );
-	if(table->entries[table->last].essid==NULL)
-	  printf("essid is null for %s \n", paket->mac_address );
-	
-	printf("pkt count=%d \n", table->entries[mac_id].packet_count,mac_id);
-	//printf("pkt count=%d, mac_id=%d\n", table->entries[mac_id].packet_count,mac_id);	
+#if 0
+	printf("After essid of existing  %s,  %s \n",table->entries[mac_id].essid,paket->essid );
+#endif
         return mac_id;
       }
     }
@@ -1134,20 +1131,17 @@ int address_table_lookup(address_table_t*  table,struct r_packet* paket) {
   if (table->length > 1) {
     table->last = NORM(table->last + 1);
   }
-    if(table->entries[table->last].essid==NULL)
-      printf("essid is null for %s \n", paket->mac_address );
-    memcpy(table->entries[table->last].essid, paket->essid, sizeof(paket->essid));
-     if(table->entries[table->last].mac_add==NULL)
-       printf("mac address is null for %s \n", paket->essid );
-    memcpy(table->entries[table->last].mac_add, paket->mac_address, sizeof(m_address));
-  table->entries[table->last].packet_count =  table->entries[table->last].packet_count+1;
 
+  memcpy(table->entries[table->last].essid, paket->essid, sizeof(paket->essid)); 
+  memcpy(table->entries[table->last].mac_add, paket->mac_address, sizeof(m_address));
+  table->entries[table->last].packet_count =  table->entries[table->last].packet_count+1;
+  
   table->entries[table->last].db_signal_sum=paket->db_sig; 
   table->entries[table->last].db_noise_sum=paket->db_noise;
  
   table->entries[table->last].dbm_noise_sum =paket->dbm_noise ;
-  table->entries[table->last].dbm_signal_sum =-(paket->dbm_sig) ;
-  
+  table->entries[table->last].dbm_signal_sum =((float)-(paket->dbm_sig));    
+  //  printf("Essid first time : %s , %s\n",table->entries[table->last].essid,paket->essid );  
   //counters 
   table->entries[table->last].bad_fcs_err_count=paket->bad_fcs_err;    
   table->entries[table->last].short_preamble_err_count = paket->short_preamble_err;
@@ -1160,15 +1154,13 @@ int address_table_lookup(address_table_t*  table,struct r_packet* paket) {
   table->entries[table->last].wep_enc_count=paket->wep_enc;
   table->entries[table->last].more_frag_count= paket->more_frag;
 
-  // to be done just once 
   table->entries[table->last].cap_privacy =paket->cap_privacy;
   table->entries[table->last].cap_ess_ibss =paket->cap_ess_ibss;
   table->entries[table->last].freq =paket->freq ; 
   table->entries[table->last].channel= paket->channel;
   memcpy(table->entries[table->last].channel_info, paket->channel_info, sizeof(paket->channel_info));
-  table->entries[table->last].rate =paket->rate ;
-
- 
+  //printf("packet rate is %f \n",paket->rate );
+  table->entries[table->last].rate = paket->rate ;
 
   if (table->added_since_last_update < MAC_TABLE_ENTRIES) {
     ++table->added_since_last_update;
@@ -1192,15 +1184,82 @@ static int initialize_bismark_id() {
 }
 
 int address_table_write_update(address_table_t* table,gzFile handle) {
-  /* if (!gzprintf(handle,"%d %d\n",NORM(table->last - table->added_since_last_update + 1), MAC_TABLE_ENTRIES)) {
-    printf("Error writing update");
+
+  static char buff[1024]; /*minimize stack size*/
+  static long prev_crc_err = 0;
+  static long prev_phy_err = 0;
+  static long prev_rx_pkts_all = 0;
+  static long prev_rx_bytes_all = 0;
+  FILE *fproc = NULL;
+
+  long phy_err_delta=0;
+  long crc_err_delta=0;
+  long rx_pkts_all_delta=0;
+  long rx_bytes_all_delta=0;
+
+  typedef long u_int;
+  u_int phy_err=0;
+  u_int crc_err=0;
+  u_int rx_pkts_all=0;
+  u_int rx_bytes_all=0;
+
+  if((fproc = fopen("/sys/kernel/debug/ieee80211/phy0/ath9k/recv", "r")) == NULL )
     return -1;
-  }*/
+
+  while ((fgets(buff, sizeof(buff), fproc)) != NULL) {
+    if (strncmp(buff,"           CRC ERR :",18) == 0) {
+      sscanf(buff,"           CRC ERR :%u ", &crc_err);     
+    }
+
+
+    if (strncmp(buff,"           PHY ERR :",18) == 0) {
+      sscanf(buff,"           PHY ERR :%u ", &phy_err);  
+    }
+
+    if (strncmp(buff,"       RX-Pkts-All :", 18) == 0) {
+      sscanf(buff,"       RX-Pkts-All :%u ", &rx_pkts_all);
+    }
+    if (strncmp(buff,"      RX-Bytes-All :", 18) == 0) {
+      sscanf(buff,"      RX-Bytes-All :%u ", &rx_bytes_all);
+    }
+  }
+  fclose(fproc);
+
+  phy_err_delta= phy_err - prev_phy_err ;
+
+  crc_err_delta= crc_err - prev_crc_err;
+  rx_pkts_all_delta=  rx_pkts_all - prev_rx_pkts_all ;
+  rx_bytes_all_delta=   rx_bytes_all - prev_rx_bytes_all ;
+
+
+  prev_crc_err =crc_err ;
+  prev_phy_err =    phy_err ;
+  prev_rx_pkts_all =  rx_pkts_all ;
+  prev_rx_bytes_all =rx_bytes_all ;
+
+#if 0
+  printf("crc_err is %ld\n",crc_err);
+  printf("phy_err is %ld\n",phy_err);
+  printf("rx_bytes_all is %ld\n",rx_bytes_all);
+  printf("rx_pkts_all is %ld\n",rx_pkts_all);
+
+  printf("prev, crc_err_delta is %ld %ld\n",prev_crc_err, crc_err_delta);
+  printf("prev, phy_err_delta is %ld %ld\n",prev_phy_err, phy_err_delta);
+  printf("prev, rx_bytes_all_delta is %ld %ld\n",prev_rx_bytes_all,rx_bytes_all_delta);
+  printf("prev, rx_pkts_all_delta is %ld %ld\n",prev_rx_pkts_all,rx_pkts_all_delta);
+#endif 
+  if(!gzprintf(handle,"%d|%d|%d|%d\n",crc_err_delta, phy_err_delta,rx_bytes_all_delta,rx_pkts_all_delta))
+    {
+      perror("error writing the zip file :from /sys");
+      exit(0);
+    }
+     
   int idx;
   for (idx = table->added_since_last_update; idx > 0; --idx) {
     int mac_id = NORM(table->last - idx + 1);
+    
 #if 0
-    printf("%s:%s:privacy%u:ibss%u:f%u:c%u:%s:r%u",table->entries[mac_id].mac_add,
+    printf("%s:%s:privacy%u:ibss%u:f%u:c%u:%s:r%2.1f",table->entries[mac_id].mac_add,
 	   table->entries[mac_id].essid, 
 	   table->entries[mac_id].cap_privacy,
 	   table->entries[mac_id].cap_ess_ibss, 
@@ -1209,7 +1268,7 @@ int address_table_write_update(address_table_t* table,gzFile handle) {
 	   table->entries[mac_id].channel_info, 
 	   table->entries[mac_id].rate);
     
-   printf("pc%d:bfs%d:sp%d:wep%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:noise%d:sig%f\n",
+   printf("pc%d:bfs%d:sp%d:wep%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:noise%d:sig%2.1f\n",
 	  table->entries[mac_id].packet_count,
 	  table->entries[mac_id].bad_fcs_err_count,
 	  table->entries[mac_id].short_preamble_err_count,
@@ -1225,12 +1284,12 @@ int address_table_write_update(address_table_t* table,gzFile handle) {
 	  table->entries[mac_id].db_noise_sum,	
 	  table->entries[mac_id].dbm_noise_sum ,
 	  table->entries[mac_id].dbm_signal_sum);
-#endif   
+
    printf("**%s %f %d %f**\n", table->entries[mac_id].mac_add, table->entries[mac_id].dbm_signal_sum,table->entries[mac_id].packet_count,
  	  table->entries[mac_id].dbm_signal_sum/ table->entries[mac_id].packet_count);
-//#endif
-//#if 0
-   if(!gzprintf(handle,"%s:%s:%u:ibss%u:f%u:c%u:%s:r%u",table->entries[mac_id].mac_add,
+#endif
+   
+   if(!gzprintf(handle,"%s|%s|%u|%u|%d|%d|%s|%2.1f",table->entries[mac_id].mac_add,
 	   table->entries[mac_id].essid, 
 	   table->entries[mac_id].cap_privacy,
 	   table->entries[mac_id].cap_ess_ibss, 
@@ -1240,9 +1299,9 @@ int address_table_write_update(address_table_t* table,gzFile handle) {
 	    table->entries[mac_id].rate)){
      perror("error writing the zip file ");
      exit(0);
-   }
-    
-   if(!gzprintf(handle,"%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d\n",
+
+   }    
+   if(!gzprintf(handle,"|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%2.1f| sigsum %2.1f \n",
 	  table->entries[mac_id].packet_count,
 	  table->entries[mac_id].bad_fcs_err_count,
 	  table->entries[mac_id].short_preamble_err_count,
@@ -1256,15 +1315,12 @@ int address_table_write_update(address_table_t* table,gzFile handle) {
 	  table->entries[mac_id].more_frag_count,
 	  table->entries[mac_id].db_signal_sum,
 	  table->entries[mac_id].db_noise_sum,	
-	  table->entries[mac_id].dbm_noise_sum ,
-		table->entries[mac_id].dbm_signal_sum)){
+		table->entries[mac_id].dbm_noise_sum , (table->entries[mac_id].dbm_signal_sum/table->entries[mac_id].packet_count))){
      perror("error writing the zip file");
      exit(0);
    }
-   //#endif    
-  }
-  
-
+  }  
+  return 0; 
 }
 
 void write_update(){
@@ -1273,18 +1329,30 @@ printf("*********************wrote update **************************\n");
 gzFile handle = gzopen (PENDING_UPDATE_FILENAME, "wb");
  if (!handle) {
    //#ifndef MODE_DEBUG
-   printf("Could not open update file for writing\n");
+   perror("Could not open update file for writing\n");
    //#endif
    exit(1);
  }
  time_t current_timestamp = time(NULL);
+ if (!gzprintf(handle,"%s %" PRId64 " %d %" PRId64 "\n",bismark_id,start_timestamp_microseconds,sequence_number,(int64_t)current_timestamp)) {
+   perror("Error writing update");
+   exit(1);
+ }
 
  address_table_write_update(&address_table,handle);
- 
  gzclose(handle);
+
+ char update_filename[FILENAME_MAX];
+ snprintf(update_filename,FILENAME_MAX,UPDATE_FILENAME,bismark_id,start_timestamp_microseconds,sequence_number);
+ if (rename(PENDING_UPDATE_FILENAME, update_filename)) {
+   perror("Could not stage update");
+   exit(1);
+ }
+ ++sequence_number;
  address_table_init(&address_table);
 
 }
+
 static void* updater(void* arg) {
   while (1) {
     sleep(SLEEP_PERIOD);
@@ -1323,8 +1391,9 @@ void process_packet (u_char * args, const struct pcap_pkthdr *header, const u_ch
 {
   snapend = packet+ header->caplen; 
   struct r_packet paket ; 
-  memset(&paket,0,sizeof(paket));
+  memset(&paket,'\0',sizeof(paket));
   ieee802_11_radio_print(packet, header->len, header->caplen,&paket);
+
 #if 0
   printf("\npacket has signal %d\n",paket.dbm_sig) ;
   printf("MAC: **%s** \n",paket.mac_address);
@@ -1338,17 +1407,16 @@ void process_packet (u_char * args, const struct pcap_pkthdr *header, const u_ch
   //printf("antenna %u \n ", paket.antenna);
   printf("fcs %u \n", paket.bad_fcs_err);
  
-  // printf("sh pr %u \n",paket.short_preamble_err);
-  // printf("wep err %u \n",paket.radiotap_wep_err);
-  // printf("frag %u \n",paket.frag_err);
-  // printf("cfp %u \n",paket.cfp_err) ;
+  printf("sh pr %u \n",paket.short_preamble_err);
+  printf("wep err %u \n",paket.radiotap_wep_err);
+  printf("frag %u \n",paket.frag_err);
+  printf("cfp %u \n",paket.cfp_err) ;
   printf("bssid_cap %d\n",paket.cap_ess_ibss);  
   printf("privacy flag %d \n",paket.cap_privacy );
   printf("channel: %u \n",paket.channel);
-  //printf("str ordered %d \n",paket.strictly_ordered);
-  //printf("pw mgmt %d \n",paket.pwr_mgmt);
+  printf("str ordered %d \n",paket.strictly_ordered);
+  printf("pw mgmt %d \n",paket.pwr_mgmt);
   printf("chan info *%s* \n",paket.channel_info);
-  
 #endif
 
   address_table_lookup(&address_table,&paket);
@@ -1356,6 +1424,7 @@ void process_packet (u_char * args, const struct pcap_pkthdr *header, const u_ch
 #ifdef MODE_DEBUG
   printf("\n------------------------------------\n");
 #endif
+
 }
 
 
@@ -1372,7 +1441,7 @@ int instantiating_pcap (char* device){
   address_table_init(&address_table);
   if (device == NULL) {
     device = pcap_lookupdev (errbuf); 
-    if (device == NULL){  printf ("%s", errbuf); exit (1);}
+    if (device == NULL){  fprintf (stderr,"%s", errbuf); exit (1);}
   }
   handle = pcap_open_live (device, BUFSIZ,1,0,errbuf); 
   if (handle == NULL) { fprintf (stderr, "%s", errbuf);
@@ -1396,10 +1465,23 @@ exit (1);
   return 0 ;
 }
 
+
+
 int main(int argc, char* argv[])
 {
-  char *device= argv[1];
+  if (argc==2){
+    printf("Usage: sniffer <interface> <time interval(seconds)> \n");
+    exit(1); 
+  }
+  char *device= argv[1];  
+  SLEEP_PERIOD= atoi(argv[2]);
+
   sigset_t signal_set;
+  struct timeval start_timeval;
+  gettimeofday(&start_timeval, NULL);
+  start_timestamp_microseconds
+    = start_timeval.tv_sec * NUM_MICROS_PER_SECOND + start_timeval.tv_usec;
+
   sigemptyset(&signal_set);
   sigaddset(&signal_set, SIGINT);
   sigaddset(&signal_set, SIGTERM);
@@ -1415,7 +1497,7 @@ int main(int argc, char* argv[])
     perror("Error creating updates thread");
     return 1;
   }
-
   instantiating_pcap (device);
+  
   return 0 ;
 }

@@ -4,7 +4,8 @@
 #define IEEE802_11_CAPINFO_LEN          2
 #define IEEE802_11_LISTENINT_LEN        2
 #define IEEE802_11_AP_LEN               6
-#define HASHNAMESIZE 4096
+#define HASHNAMESIZE 1024 
+//4096
 #define BUFSIZE 128
 
 #define E_SSID          0

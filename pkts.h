@@ -8,7 +8,7 @@ struct r_packet {
   u_int8_t db_noise;
   int8_t dbm_sig;
   int8_t dbm_noise;
-  /*u_int8_t*/ float rate; // check if this is float
+  float rate; // check if this is float
   u_int8_t antenna;
 
   u_int8_t bad_fcs_err;
@@ -59,7 +59,8 @@ typedef struct {
   u_int8_t antenna; 
   
   u_int16_t freq;
-  /*u_int8_t */ float rate;
+  
+  float rate;
 
   char channel_info[5];
 
@@ -68,7 +69,7 @@ typedef struct {
 
 } address_table_entry_t;
 
-#define MAC_TABLE_ENTRIES 100
+#define MAC_TABLE_ENTRIES 127
 
 typedef struct {
   /* A list of MAC mappings. A mapping ID is simply
