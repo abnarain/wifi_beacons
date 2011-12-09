@@ -44,59 +44,8 @@ int SLEEP_PERIOD =60 ; //default value
 static pthread_t signal_thread;
 static pthread_t update_thread;
 static pthread_mutex_t update_lock;
+/*
 static const char hex[] = "0123456789abcdef";
-static inline struct enamemem * lookup_emem(const u_char *ep)
-{
-  register u_int i, j, k;
-  struct enamemem *tp;
-  k = (ep[0] << 8) | ep[1];
-  j = (ep[2] << 8) | ep[3];
-  i = (ep[4] << 8) | ep[5];
-
-  tp = &enametable[(i ^ j) & (HASHNAMESIZE-1)];
-  while (tp->e_nxt)
-    if (tp->e_addr0 == i &&
-                    tp->e_addr1 == j &&
-	tp->e_addr2 == k)
-      return tp;
-    else
-      tp = tp->e_nxt;
-  tp->e_addr0 = i;
-  tp->e_addr1 = j;
-  tp->e_addr2 = k;
-  tp->e_nxt = (struct enamemem *)calloc(1, sizeof(*tp));
-  if (tp->e_nxt == NULL){
-#ifdef MODE_DEBUG
-    printf("lookup_emem: calloc");
-#endif
-  }
-  return tp;
-}
-
-const char * tok2strbuf(register const struct tok *lp, register const char *fmt, register int v, char *buf, size_t bufsize)
-{
-  if (lp != NULL) {
-    while (lp->s != NULL) {
-      if (lp->v == v)
-	return (lp->s);
-      ++lp;
-    }
-  }
-  if (fmt == NULL)
-    fmt = "#%d";
-  (void)snprintf(buf, bufsize, fmt, v);
-  return (const char *)buf;
-}
-
-const char * tok2str(register const struct tok *lp, register const char *fmt,
-        register int v){
-  static char buf[4][128];
-  static int idx = 0;
-  char *ret;
-  ret = buf[idx];
-  idx = (idx+1) & 3;
-  return tok2strbuf(lp, fmt, v, ret, sizeof(buf[0]));
-}
 
 const char * etheraddr_string(register const u_char *ep)
 {
@@ -143,7 +92,7 @@ const char * etheraddr_string(register const u_char *ep)
 
   return (tp->e_name);
 }
-
+*/
 void mgmt_header_print(const u_char *p, const u_int8_t **srcp,  const u_int8_t **dstp, struct r_packet* paket)
 {
     const struct mgmt_header_t *hp = (const struct mgmt_header_t *) p;
