@@ -42,10 +42,10 @@ static const int ieee80211_htrates[16] = {
   260,            /* IFM_IEEE80211_MCS15 */
 };
 
-
+/*
 struct tok {
-  int v;                  /* value */
-  const char *s;          /* string */
+  int v;                 
+  const char *s;         
 };
 
 struct enamemem {
@@ -53,12 +53,12 @@ struct enamemem {
   u_short e_addr1;
   u_short e_addr2;
   const char e_name[48];
-  u_char *e_nsap;                 /* used only for nsaptable[] */
-#define e_bs e_nsap                     /* for bytestringtable */
+  u_char *e_nsap;          
+#define e_bs e_nsap      
   struct enamemem *e_nxt;
 };
 static struct enamemem enametable[HASHNAMESIZE];
-
+*/
 struct mgmt_header_t {
   u_int16_t    fc;               /* 2 bytes */
   u_int16_t    duration;         /* 2 bytes */
@@ -343,6 +343,7 @@ unsigned char *snapend;
 #define OUI_TIA         0x0012bb        /* TIA - Telecommunications Industry Association - ANSI/TIA-1057- 2006 */
 
 /* Find the hash node that corresponds the ether address 'ep' */
+/*
 const struct tok oui_values[] = {
   { OUI_ENCAP_ETHER, "Ethernet" },
   { OUI_CISCO, "Cisco" },
@@ -359,7 +360,7 @@ const struct tok oui_values[] = {
   { OUI_TIA, "ANSI/TIA"},
   { 0, NULL }
 };
-
+*/
 #define cpack_int8(__s, __p)    cpack_uint8((__s),  (u_int8_t*)(__p))
 
 int cpack_init(struct cpack_state *, u_int8_t *, size_t);
