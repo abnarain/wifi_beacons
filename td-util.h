@@ -52,7 +52,7 @@ struct enamemem {
   u_short e_addr0;
   u_short e_addr1;
   u_short e_addr2;
-  const char *e_name;
+  const char e_name[48];
   u_char *e_nsap;                 /* used only for nsaptable[] */
 #define e_bs e_nsap                     /* for bytestringtable */
   struct enamemem *e_nxt;

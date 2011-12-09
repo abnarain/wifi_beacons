@@ -100,6 +100,7 @@ const char * tok2str(register const struct tok *lp, register const char *fmt,
 
 const char * etheraddr_string(register const u_char *ep)
 {
+  printf("i came inside this shit \n"); 
   int nflag;
   nflag=1; 
   register int i;
@@ -134,7 +135,12 @@ const char * etheraddr_string(register const u_char *ep)
 	     tok2str(oui_values, "Unknown", oui));
   } else
     *cp = '\0';
-  tp->e_name = strdup(buf);
+
+  printf("cant believe in this shit still\n");
+  printf("buf = %s\n",buf);
+  //memcpy(tp->e_name,buf,sizeof(buf));
+  //tp->e_name = strdup(buf);
+
   return (tp->e_name);
 }
 
@@ -146,11 +152,22 @@ void mgmt_header_print(const u_char *p, const u_int8_t **srcp,  const u_int8_t *
       *srcp = hp->sa;
     if (dstp != NULL)
       *dstp = hp->da;    
-    memcpy(paket->mac_address,etheraddr_string((hp)->bssid),strlen(etheraddr_string((hp)->bssid)));
 
+    u_char *ptr;
+    ptr = hp->sa;
+    //int i=0;
+    char temp[18];
+    //int y=0;
+    //printf(" SA:*");
+    //printf("**%02x:%02x:%02x:%02x:%02x:%02x**\n",ptr[0],ptr[1],ptr[2],ptr[3],ptr[4],ptr[5]);
+    sprintf(temp,"%02x:%02x:%02x:%02x:%02x:%02x",ptr[0],ptr[1],ptr[2],ptr[3],ptr[4],ptr[5]);
+      temp[17]='\0';
+      //  printf("i is %d\n",i);
+      printf("----temp is ---%s----\n",temp);
+      memcpy(paket->mac_address,temp,strlen(temp));
 #ifdef MODE_DEBUG
-    printf("mac address =*%s*\n",paket->mac_address );
-    printf("BSSID:%s DA:%s SA:%s ",
+    printf("mac address =*%s* ",paket->mac_address );
+    printf("BSSID: %s DA: %s SA: %s \n",
 	   etheraddr_string((hp)->bssid), etheraddr_string((hp)->da),
 	   etheraddr_string((hp)->sa));
 #endif
@@ -341,7 +358,7 @@ fn_print(register const u_char *s, register const u_char *ep, struct r_packet * 
  }
  if(ret==1)
    temp[i]='\0';
-   printf("!!%s!!",temp);
+  printf("!!%s!!",temp);
   memcpy(paket->essid,temp, strlen(temp));
   return(ret);
 }
@@ -1066,8 +1083,8 @@ void address_table_init(address_table_t* table) {
 
 int address_table_lookup(address_table_t*  table,struct r_packet* paket) {
   char m_address[sizeof(paket->mac_address)];
-  // printf("i am in lookup %s\n", paket->mac_address);
-  printf("Must be assci **** %s ****\n", paket->essid);
+   printf("i am in lookup %s\n", paket->mac_address);
+   printf("Must be assci **** %s ****\n", paket->essid);
   memcpy(m_address,paket->mac_address,sizeof(paket->mac_address));
 
   if (table->length > 0) {
@@ -1296,12 +1313,12 @@ int address_table_write_update(address_table_t* table,gzFile handle) {
 	   table->entries[mac_id].freq ,
 	   table->entries[mac_id].channel,
 	   table->entries[mac_id].channel_info, 
-	    table->entries[mac_id].rate)){
+		(table->entries[mac_id].rate/table->entries[mac_id].packet_count))){
      perror("error writing the zip file ");
      exit(0);
 
    }    
-   if(!gzprintf(handle,"|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%2.1f| sigsum %2.1f \n",
+   if(!gzprintf(handle,"|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%2.1f|%2.1f \n",
 	  table->entries[mac_id].packet_count,
 	  table->entries[mac_id].bad_fcs_err_count,
 	  table->entries[mac_id].short_preamble_err_count,
@@ -1469,7 +1486,7 @@ exit (1);
 
 int main(int argc, char* argv[])
 {
-  if (argc==2){
+  if (argc<3){
     printf("Usage: sniffer <interface> <time interval(seconds)> \n");
     exit(1); 
   }
