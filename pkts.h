@@ -2,7 +2,7 @@
 #define _BSSID_TABLE_H
 struct r_packet {
   char mac_address[18];
-  char essid[48] ;
+  char essid[33] ;
   u_int16_t  freq ;
   u_int8_t db_sig;
   u_int8_t db_noise;
@@ -32,7 +32,7 @@ struct r_packet {
 
 typedef struct {
   char mac_add[18];
-  char essid[48];
+  char essid[33];
 
   int packet_count;
 
@@ -69,7 +69,7 @@ typedef struct {
 
 } address_table_entry_t;
 
-#define MAC_TABLE_ENTRIES 127
+#define MAC_TABLE_ENTRIES 255
 
 typedef struct {
   /* A list of MAC mappings. A mapping ID is simply

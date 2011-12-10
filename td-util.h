@@ -41,24 +41,6 @@ static const int ieee80211_htrates[16] = {
   234,            /* IFM_IEEE80211_MCS14 */
   260,            /* IFM_IEEE80211_MCS15 */
 };
-
-/*
-struct tok {
-  int v;                 
-  const char *s;         
-};
-
-struct enamemem {
-  u_short e_addr0;
-  u_short e_addr1;
-  u_short e_addr2;
-  const char e_name[48];
-  u_char *e_nsap;          
-#define e_bs e_nsap      
-  struct enamemem *e_nxt;
-};
-static struct enamemem enametable[HASHNAMESIZE];
-*/
 struct mgmt_header_t {
   u_int16_t    fc;               /* 2 bytes */
   u_int16_t    duration;         /* 2 bytes */
@@ -328,39 +310,8 @@ struct cpack_state {
 
 unsigned char *snapend;
 
-#define OUI_ENCAP_ETHER 0x000000        /* encapsulated Ethernet */
-#define OUI_CISCO       0x00000c        /* Cisco protocols */
-#define OUI_NORTEL      0x000081        /* Nortel SONMP */
-#define OUI_CISCO_90    0x0000f8        /* Cisco bridging */
-#define OUI_RFC2684     0x0080c2        /* RFC 2427/2684 bridged Ethernet */
-#define OUI_ATM_FORUM   0x00A03E        /* ATM Forum */
-#define OUI_CABLE_BPDU  0x00E02F        /* DOCSIS spanning tree BPDU */
-#define OUI_APPLETALK   0x080007        /* Appletalk */
-#define OUI_JUNIPER     0x009069        /* Juniper */
-#define OUI_HP          0x080009        /* Hewlett-Packard */
-#define OUI_IEEE_8021_PRIVATE 0x0080c2      /* IEEE 802.1 Organisation Specific - Annex F */
-#define OUI_IEEE_8023_PRIVATE 0x00120f      /* IEEE 802.3 Organisation Specific - Annex G */
-#define OUI_TIA         0x0012bb        /* TIA - Telecommunications Industry Association - ANSI/TIA-1057- 2006 */
-
 /* Find the hash node that corresponds the ether address 'ep' */
-/*
-const struct tok oui_values[] = {
-  { OUI_ENCAP_ETHER, "Ethernet" },
-  { OUI_CISCO, "Cisco" },
-  { OUI_NORTEL, "Nortel Networks SONMP" },
-  { OUI_CISCO_90, "Cisco bridged" },
-  { OUI_RFC2684, "Ethernet bridged" },
-  { OUI_ATM_FORUM, "ATM Forum" },
-  { OUI_CABLE_BPDU, "DOCSIS Spanning Tree" },
-  { OUI_APPLETALK, "Appletalk" },
-  { OUI_JUNIPER, "Juniper" },
-  { OUI_HP, "Hewlett-Packard" },
-  { OUI_IEEE_8021_PRIVATE, "IEEE 802.1 Private"},
-  { OUI_IEEE_8023_PRIVATE, "IEEE 802.3 Private"},
-  { OUI_TIA, "ANSI/TIA"},
-  { 0, NULL }
-};
-*/
+
 #define cpack_int8(__s, __p)    cpack_uint8((__s),  (u_int8_t*)(__p))
 
 int cpack_init(struct cpack_state *, u_int8_t *, size_t);
