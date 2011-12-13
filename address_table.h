@@ -1,6 +1,6 @@
 #include "tcpdump.h"
 
-#define MAC_TABLE_ENTRIES 127
+#define MAC_TABLE_ENTRIES 255
 typedef struct {
   char mac_add[18];
   char essid[48];
