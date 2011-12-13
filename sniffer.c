@@ -30,14 +30,15 @@
 #include "create-interface.h"
 #include "pkts.h"
 #include<pthread.h>
-#define UPDATE_FILENAME_COUNTS "/tmp/sniffer/updates/%s-%" PRIu64 "-ag-%d.gz"
+//#include "drop_statistics.h"
+#define UPDATE_FILENAME_COUNTS "/tmp/bismark-uploads/wifi-beacons/%s-%" PRIu64 "-ag-%d.gz"
 #define PENDING_UPDATE_FILENAME_COUNTS "/tmp/sniffer/current-ag-update.gz"
 /* Set of signals that get blocked while processing a packet. */
 sigset_t block_set;
 
 static int sequence_number = 0;
 #define BISMARK_ID_FILENAME "/etc/bismark/ID"
-#define UPDATE_FILENAME "/tmp/sniffer/updates/%s-%" PRIu64 "-%d.gz"
+#define UPDATE_FILENAME "/tmp/bismark-uploads/wifi-beacons/%s-%" PRIu64 "-%d.gz"
 #define PENDING_UPDATE_FILENAME "/tmp/sniffer/current-update.gz"
 static char bismark_id[256];
 
@@ -45,6 +46,8 @@ static int64_t start_timestamp_microseconds;
 #define NUM_MICROS_PER_SECOND 1e6
 
 int UPDATE_PERIOD_SECS =60 ; //default value
+
+void write_update();
 
 //#define MODE_DEBUG 0
 
@@ -989,7 +992,9 @@ int address_table_lookup(address_table_t*  table,struct r_packet* paket) {
     int idx;
     for (idx = 0; idx < table->length; ++idx) {
       int mac_id = NORM(table->last - idx);
-      if (!memcmp(table->entries[mac_id].mac_add, m_address, sizeof(m_address))) {
+      if (!memcmp(table->entries[mac_id].mac_add, m_address, sizeof(m_address))) /*||
+	(  memcmp(table->entries[mac_id].mac_add, m_address, sizeof(m_address))==0 && table->entries[mac_id].freq=! paket->freq  ) 	     
+	)*/ {
 	//memcpy(table->entries[mac_id].mac_add, m_address, sizeof(m_address));
 	table->entries[mac_id].packet_count++;
 	if(paket->bad_fcs_err)
@@ -1037,9 +1042,12 @@ int address_table_lookup(address_table_t*  table,struct r_packet* paket) {
       }
     }
   }
-  if (table->length == MAC_TABLE_ENTRIES) {
+
+  if (table->length == MAC_TABLE_ENTRIES-1) {
     /* Discard the oldest MAC address. */
     table->first = NORM(table->first + 1);
+    //table is full, write it to a file
+    write_update();
   } else {
     ++table->length;
   }
@@ -1128,38 +1136,40 @@ int address_table_write_update(address_table_t* table,gzFile handle) {
 	  table->entries[mac_id].db_signal_sum,
 	  table->entries[mac_id].db_noise_sum,	
 	  table->entries[mac_id].dbm_noise_sum ,
-	  table->entries[mac_id].dbm_signal_sum, (table->entries[mac_id].dbm_signal_sum/table->entries[mac_id].packet_count1));
+	  table->entries[mac_id].dbm_signal_sum, (table->entries[mac_id].dbm_signal_sum/table->entries[mac_id].packet_count));
 
    printf("**%s %f %d %f**\n", table->entries[mac_id].mac_add, table->entries[mac_id].dbm_signal_sum,table->entries[mac_id].packet_count,
  	  table->entries[mac_id].dbm_signal_sum/ table->entries[mac_id].packet_count);
 #endif
    if(!gzprintf(handle,"%s|%s|%u|%u|%d|%d|%s|%2.1f",table->entries[mac_id].mac_add,
-	   table->entries[mac_id].essid, 
-	   table->entries[mac_id].cap_privacy,
-	   table->entries[mac_id].cap_ess_ibss, 
-	   table->entries[mac_id].freq ,
-	   table->entries[mac_id].channel,
-	   table->entries[mac_id].channel_info, 
+		table->entries[mac_id].essid, 
+		table->entries[mac_id].cap_privacy,
+		table->entries[mac_id].cap_ess_ibss, 
+		table->entries[mac_id].freq ,
+		table->entries[mac_id].channel,
+		table->entries[mac_id].channel_info, 
 		(table->entries[mac_id].rate/table->entries[mac_id].packet_count))){
      perror("error writing the zip file ");
      exit(0);
 
    }    
-   if(!gzprintf(handle,"|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%2.1f \n",
-	  table->entries[mac_id].packet_count,
-	  table->entries[mac_id].bad_fcs_err_count,
-	  table->entries[mac_id].short_preamble_err_count,
-	  table->entries[mac_id].radiotap_wep_err_count,
-	  table->entries[mac_id].frag_err_count,
-	  table->entries[mac_id].cfp_err_count,
-	  table->entries[mac_id].retry_err_count,
-	  table->entries[mac_id].strictly_ordered_err,
-	  table->entries[mac_id].pwr_mgmt_count, 
-	  table->entries[mac_id].wep_enc_count,
-	  table->entries[mac_id].more_frag_count,
-	  table->entries[mac_id].db_signal_sum,
-	  table->entries[mac_id].db_noise_sum,	
-		 (table->entries[mac_id].dbm_signal_sum/table->entries[mac_id].packet_count))){
+   if(!gzprintf(handle,"|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%2.1f|%2.1f\n",
+		table->entries[mac_id].packet_count,
+		table->entries[mac_id].bad_fcs_err_count,
+		table->entries[mac_id].short_preamble_err_count,
+		table->entries[mac_id].radiotap_wep_err_count,
+		table->entries[mac_id].frag_err_count,
+		table->entries[mac_id].cfp_err_count,
+		table->entries[mac_id].retry_err_count,
+		table->entries[mac_id].strictly_ordered_err,
+		table->entries[mac_id].pwr_mgmt_count, 
+		table->entries[mac_id].wep_enc_count,
+		table->entries[mac_id].more_frag_count,
+		table->entries[mac_id].db_signal_sum,
+		table->entries[mac_id].db_noise_sum,
+		0,
+		(table->entries[mac_id].dbm_noise_sum/table->entries[mac_id].packet_count),	
+		(table->entries[mac_id].dbm_signal_sum/table->entries[mac_id].packet_count))){
      perror("error writing the zip file");
      exit(0);
    }
@@ -1167,12 +1177,15 @@ int address_table_write_update(address_table_t* table,gzFile handle) {
   } 
   return 0; 
 }
-  static unsigned  int prev_rx_packets_1=0;
-  static  unsigned int prev_tx_bytes_1=0; 
-  static unsigned int prev_rx_bytes_1 =0; 
-  static  unsigned int prev_tx_retries_1=0;  
-  static unsigned  int prev_tx_packets_1 =0; 
-  static unsigned  int prev_tx_failed_1=0;
+
+
+static unsigned  int prev_rx_packets_1=0;
+static  unsigned int prev_tx_bytes_1=0; 
+static unsigned int prev_rx_bytes_1 =0; 
+static  unsigned int prev_tx_retries_1=0;  
+static unsigned  int prev_tx_packets_1 =0; 
+static unsigned  int prev_tx_failed_1=0;
+static int check=0;
 
 int agg_data(gzFile handle_counts){
 
@@ -1243,6 +1256,7 @@ int agg_data(gzFile handle_counts){
   prev_rx_pkts_all =  rx_pkts_all ;
   prev_rx_bytes_all =rx_bytes_all ;
 
+
 #if 0
   printf("crc_err is %u\n",crc_err);
   printf("phy_err is %u\n",phy_err);
@@ -1254,11 +1268,23 @@ int agg_data(gzFile handle_counts){
   printf("prev, rx_bytes_all_delta is %u %u\n",prev_rx_bytes_all,rx_bytes_all_delta);
   printf("prev, rx_pkts_all_delta is %u %u\n",prev_rx_pkts_all,rx_pkts_all_delta);
 #endif
+
+  if(check==0){
+    if(!gzprintf(handle_counts,"%u|%u|%u|%u\n",prev_crc_err, prev_phy_err,prev_rx_bytes_all,prev_rx_pkts_all))
+    {
+      perror("error writing the zip file :from debugfs 0 ");
+      exit(1);
+    }
+    check++;
+  }
+
   if(!gzprintf(handle_counts,"%d|%d|%d|%d\n",crc_err_delta, phy_err_delta,rx_bytes_all_delta,rx_pkts_all_delta))
     {
       perror("error writing the zip file :from debugfs 0 ");
       exit(1);
     }
+
+
   //-----------------------------------------------------
   if((fproc = fopen("/sys/kernel/debug/ieee80211/phy1/ath9k/recv", "r")) == NULL ){
     perror("Can't read from debugfs phy1");
@@ -1288,7 +1314,6 @@ int agg_data(gzFile handle_counts){
   static unsigned int prev_rx_pkts_all_1 = 0;
   static unsigned int prev_rx_bytes_all_1 = 0;
   
-
   phy_err_delta= phy_err - prev_phy_err_1 ;
   if(phy_err_delta<0){
     phy_err_delta= ( a - prev_phy_err_1) + (phy_err);
@@ -1314,7 +1339,7 @@ int agg_data(gzFile handle_counts){
   prev_rx_pkts_all_1 =  rx_pkts_all ;
   prev_rx_bytes_all_1 =rx_bytes_all ;
 
-
+#if 0
   printf("crc_err is %u\n",crc_err);
   printf("phy_err is %u\n",phy_err);
   printf("rx_bytes_all is %u\n",rx_bytes_all);
@@ -1324,7 +1349,16 @@ int agg_data(gzFile handle_counts){
   printf("prev, phy_err_delta is %u %u\n",prev_phy_err_1, phy_err_delta);
   printf("prev, rx_bytes_all_delta is %u %u\n",prev_rx_bytes_all_1,rx_bytes_all_delta);
   printf("prev, rx_pkts_all_delta is %u %u\n",prev_rx_pkts_all_1,rx_pkts_all_delta);
+#endif
 
+  if(check==1){
+  if(!gzprintf(handle_counts,"%u|%u|%u|%u\n",prev_crc_err_1, prev_phy_err_1,prev_rx_bytes_all_1,prev_rx_pkts_all_1))
+    {
+      perror("error writing the zip file :from debugfs 1 ");
+      exit(1);
+    }
+  check++;
+  }
   if(!gzprintf(handle_counts,"%d|%d|%d|%d\n",crc_err_delta, phy_err_delta,rx_bytes_all_delta,rx_pkts_all_delta))
     {
       perror("error writing the zip file :from debugfs 1 ");
@@ -1382,15 +1416,12 @@ int agg_data(gzFile handle_counts){
     }
     if (strncmp(path, "\ttx bitrate:", 8) == 0) {
       sscanf (path,  "\ttx bitrate:\t%d.%d ",&tx_rate_i,&tx_rate_d);
-      printf("I am in tx bitrate\n");
     }
     if (strncmp(path, "\trx bitrate:", 8) == 0) {
       sscanf (path,  "\trx bitrate:\t%d.%d ",&rx_rate_i,&rx_rate_d);  
-      printf("I am in rx bitrate\n");
     }
     if (strncmp(path, "\tsignal avg:", 11) == 0) {
       sscanf (path,  "\tsignal avg:\t%d ",&signal_avg);  
-      printf("I am in signal avg\n");
     }
   }
   pclose(fp);
@@ -1421,25 +1452,38 @@ int agg_data(gzFile handle_counts){
   if( delta_tx_failed< 0 ){
     delta_tx_failed=  a- prev_tx_failed+tx_failed;;
   }
+  prev_rx_packets=rx_packets;    prev_tx_bytes=tx_bytes;
+  prev_rx_bytes =rx_bytes;     prev_tx_retries=tx_retries;
+  prev_tx_packets =tx_packets;      prev_tx_failed=tx_failed;
+  
+  if(check==2){
+  if(!gzprintf(handle_counts,"%u|%u|%u|%u|%u|%u\n",prev_rx_packets,prev_rx_bytes ,
+	       prev_tx_packets,prev_tx_bytes, prev_tx_retries,prev_tx_failed))
+    {
+      syslog(LOG_ERR,"error writing the zip file :from wlan0");
+      //      perror("error writing the zip file :from wlan0");
+      //though the command is having null output, One has to continue to read others, hence no returns/ exits
+    }
+     check++;
+  }
+  
 
   //  printf("going to print iw details \n");
   if(!gzprintf(handle_counts,"%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d\n",delta_rx_packets,delta_rx_bytes ,
 	       delta_tx_packets,delta_tx_bytes, delta_tx_retries,delta_tx_failed,
 	       tx_rate_i,tx_rate_d,rx_rate_i,rx_rate_d,-signal_avg));
     {
-      perror("error writing the zip file :from wlan0");
-      exit(1);
+      syslog(LOG_ERR,"error writing the zip file :from wlan0");
+      //      perror("error writing the zip file :from wlan0");
+      //though the command is having null output, One has to continue to read others, hence no returns/ exits
     }
-    
+#if 0    
   printf("WLAN0 stats \n");
   printf("rx packets =%d, bytes=%d\n", rx_packets,rx_bytes);
   printf("tx packets =%d, bytes=%d\n", tx_packets,tx_bytes);
   printf("tx retries =%d, failed=%d\n", tx_retries,tx_failed);
   printf("delta : rx_packet=%d,rx_byte=%d tx_packet=%d,tx_bytes=%d,tx_retries=%d,tx_failed=%d\n",delta_rx_packets,delta_rx_bytes , delta_tx_packets,delta_tx_bytes, delta_tx_retries,delta_tx_failed) ;
-
-  prev_rx_packets=rx_packets;    prev_tx_bytes=tx_bytes;
-  prev_rx_bytes =rx_bytes;     prev_tx_retries=tx_retries;
-  prev_tx_packets =tx_packets;      prev_tx_failed=tx_failed;
+#endif
 
 
 
@@ -1529,14 +1573,27 @@ int agg_data(gzFile handle_counts){
   prev_rx_packets_1=rx_packets;    prev_tx_bytes_1=tx_bytes;
   prev_rx_bytes_1 =rx_bytes;     prev_tx_retries_1=tx_retries;
   prev_tx_packets_1 =tx_packets;      prev_tx_failed_1=tx_failed;
-
+  
+  if(check==3){
+  if(!gzprintf(handle_counts,"%u|%u|%u|%u|%u|%u\n",prev_rx_packets_1,prev_rx_bytes_1 , 
+	       prev_tx_packets_1,prev_tx_bytes_1, prev_tx_retries_1,prev_tx_failed_1)){
+    syslog(LOG_ERR,"error writing the zip file :from wlan1");
+      //the command need not give output, hence nothing to be written, but still cannot return/exit
+  }
+  check++;
+  }
 
   if(!gzprintf(handle_counts,"%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d\n",delta_rx_packets_1,delta_rx_bytes_1 , 
 	       delta_tx_packets_1,delta_tx_bytes_1, delta_tx_retries_1,delta_tx_failed_1,
 	       tx_rate_i,tx_rate_d,rx_rate_i,rx_rate_d,-signal_avg)) {
-      perror("error writing the zip file :from wlan1");
-      exit(1);
+    syslog(LOG_ERR,"error writing the zip file :from wlan1");
+      //the command need not give output, hence nothing to be written, but still cannot return/exit
     }
+  if(!gzprintf(handle_counts,"%s\n","-" )) {
+    syslog(LOG_ERR,"error writing the zip file :end of set");
+      //the command need not give output, hence nothing to be written, but still cannot return/exit
+    }
+  
   return 0; 
 }
 
@@ -1590,6 +1647,7 @@ gzFile handle = gzopen (PENDING_UPDATE_FILENAME, "wb");
 
  ++sequence_number;
  address_table_init(&address_table);
+
 }
 
 static void set_next_alarm() {
@@ -1654,10 +1712,18 @@ int main(int argc, char* argv[])
     printf("Usage: sniffer  <time interval(seconds)> \n");
     exit(1); 
   }
+
   initialize_bismark_id();
- 
+
+  if( atoi(argv[1])){
   UPDATE_PERIOD_SECS= atoi(argv[1]);
-  sigset_t signal_set;
+  printf("new value of secs is =%d\n",   UPDATE_PERIOD_SECS);
+  }
+  else {
+    printf("using the 60 secs %d\n",   UPDATE_PERIOD_SECS);
+  }
+  printf("update period=%d%\n",UPDATE_PERIOD_SECS );
+
   struct timeval start_timeval; 
   gettimeofday(&start_timeval, NULL);
   start_timestamp_microseconds  = start_timeval.tv_sec * NUM_MICROS_PER_SECOND + start_timeval.tv_usec;
@@ -1665,12 +1731,11 @@ int main(int argc, char* argv[])
   initialize_signal_handler();
   set_next_alarm();
   char *filter = "type mgt subtype beacon"; //the awesome one liner
-  //  instantiating_pcap (device);
   int               t;
   fd_set            fd_wait;
   struct timeval    st;
-  struct pcap      *pcap0;
-  struct pcap      *pcap1;
+  struct pcap      *pcap0=NULL;
+  struct pcap      *pcap1=NULL;
   char              errbuf[PCAP_ERRBUF_SIZE];
   char              errbuf1[PCAP_ERRBUF_SIZE];
   bpf_u_int32 netp;   
