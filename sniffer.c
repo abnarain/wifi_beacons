@@ -29,23 +29,63 @@
 #include "td-util.h"
 #include "create-interface.h"
 #include "pkts.h"
-#include<pthread.h>
-//#include "drop_statistics.h"
-#define UPDATE_FILENAME_COUNTS "/tmp/bismark-uploads/wifi-beacons/%s-%" PRIu64 "-ag-%d.gz"
-#define PENDING_UPDATE_FILENAME_COUNTS "/tmp/sniffer/current-ag-update.gz"
-/* Set of signals that get blocked while processing a packet. */
-sigset_t block_set;
 
-static int sequence_number = 0;
 #define BISMARK_ID_FILENAME "/etc/bismark/ID"
 #define UPDATE_FILENAME "/tmp/bismark-uploads/wifi-beacons/%s-%" PRIu64 "-%d.gz"
 #define PENDING_UPDATE_FILENAME "/tmp/sniffer/current-update.gz"
-static char bismark_id[256];
 
-static int64_t start_timestamp_microseconds;
+#define UPDATE_FILENAME_COUNTS "/tmp/bismark-uploads/wifi-beacons/%s-%" PRIu64 "-ag-%d.gz"
+#define PENDING_UPDATE_FILENAME_COUNTS "/tmp/sniffer/current-ag-update.gz"
+
+#define UPDATE_FILENAME_PCAP "/tmp/bismark-uploads/wifi-beacons/%s-%" PRIu64 "-pcap-%d.gz"
+#define PENDING_UPDATE_FILENAME_PCAP "/tmp/sniffer/current-update.gz"
+
+/* Set of signals that get blocked while processing a packet. */
+sigset_t block_set;
+
+struct timeval start_timeval;
+struct timeval timeval_1; 
+struct timeval timeval_2; 
+
+static int sequence_number = 0;
+static char bismark_id[256];
+struct pcap *pcap0=NULL;
+struct pcap *pcap1=NULL;
+
 #define NUM_MICROS_PER_SECOND 1e6
 
 int UPDATE_PERIOD_SECS =60 ; //default value
+
+static int packets_received = 0;
+static int pcap0_stat =0;
+static int pcap1_stat =0;
+
+static int64_t start_timestamp_microseconds;
+
+static unsigned  int prev_rx_packets_1=0;
+static unsigned int prev_tx_bytes_1=0; 
+static unsigned int prev_rx_bytes_1 =0; 
+static unsigned int prev_tx_retries_1=0;  
+static unsigned  int prev_tx_packets_1 =0; 
+static unsigned  int prev_tx_failed_1=0;
+
+static int check=0;
+static char buff[1024]; 
+
+static unsigned int prev_crc_err = 0;
+static unsigned int prev_phy_err = 0;
+static unsigned int prev_rx_pkts_all = 0;
+static unsigned int prev_rx_bytes_all = 0;
+
+static unsigned int prev_crc_err_1 = 0;
+static unsigned int prev_phy_err_1 = 0;
+static unsigned int prev_rx_pkts_all_1 = 0;
+static unsigned int prev_rx_bytes_all_1 = 0;
+
+
+static unsigned  int prev_rx_packets =0;  static  unsigned int prev_tx_bytes=0; 
+static unsigned int prev_rx_bytes    =0;  static  unsigned int prev_tx_retries=0;  
+static unsigned  int prev_tx_packets =0;  static unsigned  int prev_tx_failed=0;
 
 void write_update();
 
@@ -295,10 +335,8 @@ u_int8_t * cpack_align_and_reserve(struct cpack_state *cs, size_t wordsize)
 int cpack_uint32(struct cpack_state *cs, u_int32_t *u)
 {
   u_int8_t *next;
-
   if ((next = cpack_align_and_reserve(cs, sizeof(*u))) == NULL)
     return -1;
-
   *u = EXTRACT_LE_32BITS(next);
   cs->c_next = next + sizeof(*u);
   return 0;
@@ -530,62 +568,6 @@ int parse_elements(struct mgmt_body_t *pbody, const u_char *p, int offset,u_int 
   return 1;
 }
 
-void PRINT_HT_RATE(char* _sep,  u_int8_t _r, char* _suf,struct r_packet * paket){
-#ifdef MODE_DEBUG
-  printf("  %s%.1f%s ", _sep, (.5 * ieee80211_htrates[(_r) & 0xf]), _suf);
-#endif  
-  paket->rate=(.5 * ieee80211_htrates[(_r) & 0xf]);
-  
-}
-
-void PRINT_SSID( struct mgmt_body_t p,struct r_packet* paket){ 
-  if (p.ssid_present) { 
-#ifdef MODE_DEBUG   
-    printf(" ( "); 
-#endif
-    
-    fn_print(p.ssid.ssid, NULL,paket); 
-#ifdef MODE_DEBUG
-    printf(")"); 
-#endif
-  }
-}
-
-void PRINT_RATE(char* _sep,  u_int8_t _r, char* _suf,struct r_packet * paket ) {
-#ifdef MODE_DEBUG
-  printf("  %s%2.1f%s ", _sep, (.5 * ((_r) & 0x7f)), _suf);
-#endif
-  paket->rate=(float)((.5 * ((_r) & 0x7f)));
-  
-}
-
-//call to this function is commented out 
-void PRINT_RATES(struct mgmt_body_t p, struct r_packet* paket) {
-  if (p.rates_present) {
-  int z; 
- const char *sep = " ["; 
-  for (z = 0; z < p.rates.length ; z++) { 
-    PRINT_RATE(sep, p.rates.rate[z], (p.rates.rate[z] & 0x80 ? "*" : ""),paket); 
-  sep = " "; 
-  } 
-  if (p.rates.length != 0) 
-    printf(" Mbit] "); 
-  }
-
-}
-void PRINT_DS_CHANNEL( struct mgmt_body_t  p, struct r_packet* paket){
-  if (p.ds_present) {
-#ifdef MODE_DEBUG
-    printf(" CH: %u", p.ds.channel);
-#endif
-    paket->channel= p.ds.channel;
-  } 
-#ifdef MODE_DEBUG
-  printf("%s ", CAPABILITY_PRIVACY(p.capability_info) ? ", PRIVACY" : "" );
-#endif
-  paket->cap_privacy=  CAPABILITY_PRIVACY(p.capability_info) ? 1 :0 ;
-}
-
 int handle_beacon(const u_char *p, u_int length, struct r_packet * paket)
 {
   struct mgmt_body_t pbody;
@@ -612,12 +594,24 @@ int handle_beacon(const u_char *p, u_int length, struct r_packet * paket)
   
   ret = parse_elements(&pbody, p, offset, length);
   
-  PRINT_SSID(pbody,paket);
-  PRINT_DS_CHANNEL(pbody,paket);
-  
+  if (pbody.ssid_present) {     
+    fn_print(pbody.ssid.ssid, NULL,paket); 
+  }
+  if (pbody.ds_present) {
+    paket->channel= pbody.ds.channel;
+  } 
+  paket->cap_privacy=  CAPABILITY_PRIVACY(pbody.capability_info) ? 1 :0 ;
+
+  u_int8_t _r; 
+  if (pbody.rates_present) {   
+    _r= pbody.rates.rate[pbody.rates.length -1] ;
+    paket->rate_max=(float)((.5 * ((_r) & 0x7f)));
+  }
+  else {
+    paket->rate_max=0.0; // undefined rate, because of bad fcs
+  }
 #ifdef MODE_DEBUG
-  PRINT_RATES(pbody,paket);
-  printf(" %s",	 CAPABILITY_ESS(pbody.capability_info) ? "ESS" : "IBSS");
+  printf("%s",	 CAPABILITY_ESS(pbody.capability_info) ? "ESS" : "IBSS");
 #endif
   paket->cap_ess_ibss =55;
   paket->cap_ess_ibss=  CAPABILITY_ESS(pbody.capability_info) ? 1:2;
@@ -673,6 +667,8 @@ u_int ieee802_11_print(const u_char *p, u_int length, u_int orig_caplen, int pad
 #endif
     return hdrlen;
   }
+
+
   ieee_802_11_hdr_print(fc, p, hdrlen, &src, &dst,paket);
   length -= hdrlen;
   caplen -= hdrlen;
@@ -781,16 +777,19 @@ int print_radiotap_field(struct cpack_state *s, u_int32_t bit, u_int8_t *flags, 
     break;
   case IEEE80211_RADIOTAP_RATE:
     if (u.u8 & 0x80){    
-      //paket->rate=u.u8;
-      //#ifdef MODE_DEBUG
-      PRINT_HT_RATE("", u.u8, "Mb/s ",paket);
-      //#endif
+      u_int8_t _r= u.u8;
+      paket->rate_mcs=(.5 * ieee80211_htrates[(_r) & 0xf]);
+      printf(" got the mcs_rate %f\n", paket->rate_mcs);
+      paket->rate=0;
     }
     else{    
-      PRINT_RATE("", u.u8, "Mb/s ",paket);
-      //  printf(" rate is %f main ", paket->rate);
-      //printf("rate **%2.1f**\n", paket->rate);
-    }    
+      u_int8_t _r= u.u8;
+#ifdef MODE_DEBUG
+  printf("  %s%2.1f%s ", _sep, (.5 * ((_r) & 0x7f)), _suf);
+#endif
+  paket->rate=(float)((.5 * ((_r) & 0x7f)));
+  paket->rate_mcs= 0;
+    }
     break;
   case IEEE80211_RADIOTAP_DBM_ANTSIGNAL:
     paket->dbm_sig=u.i8;
@@ -875,9 +874,7 @@ int print_radiotap_field(struct cpack_state *s, u_int32_t bit, u_int8_t *flags, 
 #endif
     break;
   case IEEE80211_RADIOTAP_TSFT:
-#ifdef MODE_DEBUG
-    printf(/*% PRIu64 */" tsft "/*, u.u64*/);
-#endif
+    //don't need it
     break;
   case IEEE80211_RADIOTAP_XCHANNEL:
     print_chaninfo(u2.u16, u.u32,paket);
@@ -931,6 +928,7 @@ u_int ieee802_11_radio_print(const u_char *p, u_int length, u_int caplen, struct
 #ifdef MODE_DEBUG
     printf("more bitmap ext than bytes");
 #endif
+    printf("** has more !!** \n");
     return caplen;
   }
   iter = (u_char*)(last_presentp + 1);
@@ -982,23 +980,27 @@ void address_table_init(address_table_t* table) {
 
 int address_table_lookup(address_table_t*  table,struct r_packet* paket) {
   char m_address[sizeof(paket->mac_address)];
-
-  //   printf("In lookup %s\n", paket->mac_address);
-  //   printf("Must be assci **** %s ****\n", paket->essid);
-
+#ifdef MODE_DEBUG
+     printf("mac address %s\n", paket->mac_address);
+     printf("essid %s \n", paket->essid);
+#endif
   memcpy(m_address,paket->mac_address,sizeof(paket->mac_address));
   if (table->length > 0) {
     /* Search table starting w/ most recent MAC addresses. */
     int idx;
     for (idx = 0; idx < table->length; ++idx) {
       int mac_id = NORM(table->last - idx);
-      if (!memcmp(table->entries[mac_id].mac_add, m_address, sizeof(m_address))) /*||
-	(  memcmp(table->entries[mac_id].mac_add, m_address, sizeof(m_address))==0 && table->entries[mac_id].freq=! paket->freq  ) 	     
-	)*/ {
-	//memcpy(table->entries[mac_id].mac_add, m_address, sizeof(m_address));
+      if (!memcmp(table->entries[mac_id].mac_add, m_address, sizeof(m_address))){
+
 	table->entries[mac_id].packet_count++;
-	if(paket->bad_fcs_err)
+	table->entries[mac_id].db_signal_sum = table->entries[mac_id].db_signal_sum+ paket->db_sig;
+	table->entries[mac_id].db_noise_sum= table->entries[mac_id].db_noise_sum +paket->db_noise;
+	table->entries[mac_id].dbm_noise_sum = table->entries[mac_id].dbm_noise_sum + paket->dbm_noise ;
+	table->entries[mac_id].dbm_signal_sum =(float)-(paket->dbm_sig) + table->entries[mac_id].dbm_signal_sum ;
+
+	if(paket->bad_fcs_err){
 	  table->entries[mac_id].bad_fcs_err_count++;
+	}else{
 	if(paket->short_preamble_err)
 	  table->entries[mac_id].short_preamble_err_count++;
 	if(paket->radiotap_wep_err)
@@ -1010,23 +1012,17 @@ int address_table_lookup(address_table_t*  table,struct r_packet* paket) {
 	if(paket->retry)
 	  table->entries[mac_id].retry_err_count++; 
 	if(paket->strictly_ordered)
-	  table->entries[mac_id].strictly_ordered_err=paket->strictly_ordered;
+	  table->entries[mac_id].strictly_ordered_err_count++;
 	if(paket->pwr_mgmt)
 	  table->entries[mac_id].pwr_mgmt_count++;
 	if(paket->wep_enc)
 	  table->entries[mac_id].wep_enc_count++;
 	if(paket->more_frag)
 	  table->entries[mac_id].more_frag_count++;
-	table->entries[mac_id].db_signal_sum = table->entries[mac_id].db_signal_sum+ paket->db_sig; 
-
-	table->entries[mac_id].db_noise_sum= table->entries[mac_id].db_noise_sum +paket->db_noise;
-	
-	table->entries[mac_id].dbm_noise_sum =	table->entries[mac_id].dbm_noise_sum + paket->dbm_noise ;
-
-	table->entries[mac_id].dbm_signal_sum =(float)-(paket->dbm_sig) + table->entries[mac_id].dbm_signal_sum ;
-	table->entries[mac_id].rate = table->entries[mac_id].rate +paket->rate ;
-	
-
+	table->entries[mac_id].rate_mcs=paket->rate_mcs;
+	table->entries[mac_id].rate = paket->rate;
+	table->entries[mac_id].antenna = paket->antenna;
+     }    
 #if 0
 	//printf("sig after %2.1f \n",table->entries[mac_id].dbm_signal_sum) ;
 	printf("Before essid  %s,  %s \n",table->entries[mac_id].essid,paket->essid);
@@ -1043,11 +1039,15 @@ int address_table_lookup(address_table_t*  table,struct r_packet* paket) {
     }
   }
 
-  if (table->length == MAC_TABLE_ENTRIES-1) {
-    /* Discard the oldest MAC address. */
-    table->first = NORM(table->first + 1);
-    //table is full, write it to a file
+  if (table->length == MAC_TABLE_ENTRIES) {
+    //table is full, write it to a file 
+    printf("writing update now after %ld \n", timeval_2.tv_sec-timeval_1.tv_sec);
+    gettimeofday(&timeval_2, NULL);
     write_update();
+    //updating the timestamp
+    timeval_1.tv_sec  =timeval_2.tv_sec;
+    timeval_1.tv_usec =timeval_2.tv_usec;    
+
   } else {
     ++table->length;
   }
@@ -1063,7 +1063,7 @@ int address_table_lookup(address_table_t*  table,struct r_packet* paket) {
  
   table->entries[table->last].dbm_noise_sum =paket->dbm_noise ;
   table->entries[table->last].dbm_signal_sum =((float)-(paket->dbm_sig));    
-  //  printf("Essid first time : %s , %s\n",table->entries[table->last].essid,paket->essid );  
+
   //counters 
   table->entries[table->last].bad_fcs_err_count=paket->bad_fcs_err;    
   table->entries[table->last].short_preamble_err_count = paket->short_preamble_err;
@@ -1071,7 +1071,7 @@ int address_table_lookup(address_table_t*  table,struct r_packet* paket) {
   table->entries[table->last].frag_err_count =paket->frag_err;
   table->entries[table->last].cfp_err_count = paket->cfp_err ;
   table->entries[table->last].retry_err_count =paket->retry ;  
-  table->entries[table->last].strictly_ordered_err=paket->strictly_ordered;
+  table->entries[table->last].strictly_ordered_err_count=paket->strictly_ordered;
   table->entries[table->last].pwr_mgmt_count =paket->pwr_mgmt;
   table->entries[table->last].wep_enc_count=paket->wep_enc;
   table->entries[table->last].more_frag_count= paket->more_frag;
@@ -1081,8 +1081,11 @@ int address_table_lookup(address_table_t*  table,struct r_packet* paket) {
   table->entries[table->last].freq =paket->freq ; 
   table->entries[table->last].channel= paket->channel;
   memcpy(table->entries[table->last].channel_info, paket->channel_info, sizeof(paket->channel_info));
-  //printf("packet rate is %f \n",paket->rate );
   table->entries[table->last].rate = paket->rate ;
+  table->entries[table->last].rate_mcs=paket->rate_mcs;
+  table->entries[table->last].rate_max=paket->rate_max;
+  table->entries[table->last].antenna = paket->antenna;
+  table->entries[table->last].channel_change = 0;
 
   if (table->added_since_last_update < MAC_TABLE_ENTRIES) {
     ++table->added_since_last_update;
@@ -1110,18 +1113,21 @@ int address_table_write_update(address_table_t* table,gzFile handle) {
   int idx;
   for (idx = table->added_since_last_update; idx > 0; --idx) {
     int mac_id = NORM(table->last - idx + 1);
-    
-#if 0
-    printf("%s|%s|privacy%u|ibss%u|f%u|c%u|%s|r%2.1f",table->entries[mac_id].mac_add,
-	   table->entries[mac_id].essid, 
-	   table->entries[mac_id].cap_privacy,
-	   table->entries[mac_id].cap_ess_ibss, 
-	   table->entries[mac_id].freq ,
-	   table->entries[mac_id].channel,
-	   table->entries[mac_id].channel_info, 
-	   table->entries[mac_id].rate/table->entries[mac_id].packet_count);
-    
-   printf("pc%d|bfs%d|sp%d|wep%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|noise%d|%2.1f|%2.1f\n",
+#if 0    
+   printf("mac%s|%s|%u|%u|f %d|c%d|%s|rate %2.1f|rate=mcs%2.1f|r_max %2.1f|ant %d|%u \n",
+	  table->entries[mac_id].mac_add,
+	  table->entries[mac_id].essid,
+	  table->entries[mac_id].cap_privacy,
+	  table->entries[mac_id].cap_ess_ibss, 
+	  table->entries[mac_id].freq ,
+	  table->entries[mac_id].channel,
+	  table->entries[mac_id].channel_info, 
+	  table->entries[mac_id].rate,
+	  table->entries[mac_id].rate_mcs,
+	  table->entries[mac_id].rate_max,
+	  table->entries[mac_id].antenna,
+	  table->entries[mac_id].channel_change);
+   printf("|pc %d|bfcs %d|sp%d|r_w_e%d|fra%d|cfp%d|ret%d|sto%d|pm%d|we%d|mf%d|db_s%d|db_n%d|ns%d|%2.1f|%2.1f\n",
 	  table->entries[mac_id].packet_count,
 	  table->entries[mac_id].bad_fcs_err_count,
 	  table->entries[mac_id].short_preamble_err_count,
@@ -1129,29 +1135,35 @@ int address_table_write_update(address_table_t* table,gzFile handle) {
 	  table->entries[mac_id].frag_err_count,
 	  table->entries[mac_id].cfp_err_count,
 	  table->entries[mac_id].retry_err_count,
-	  table->entries[mac_id].strictly_ordered_err,
+	  table->entries[mac_id].strictly_ordered_err_count,
 	  table->entries[mac_id].pwr_mgmt_count, 
 	  table->entries[mac_id].wep_enc_count,
 	  table->entries[mac_id].more_frag_count,
 	  table->entries[mac_id].db_signal_sum,
-	  table->entries[mac_id].db_noise_sum,	
-	  table->entries[mac_id].dbm_noise_sum ,
-	  table->entries[mac_id].dbm_signal_sum, (table->entries[mac_id].dbm_signal_sum/table->entries[mac_id].packet_count));
+	  table->entries[mac_id].db_noise_sum,
+	  0,
+	  (table->entries[mac_id].dbm_noise_sum/table->entries[mac_id].packet_count),	
+	  (table->entries[mac_id].dbm_signal_sum/table->entries[mac_id].packet_count));
 
    printf("**%s %f %d %f**\n", table->entries[mac_id].mac_add, table->entries[mac_id].dbm_signal_sum,table->entries[mac_id].packet_count,
  	  table->entries[mac_id].dbm_signal_sum/ table->entries[mac_id].packet_count);
 #endif
-   if(!gzprintf(handle,"%s|%s|%u|%u|%d|%d|%s|%2.1f",table->entries[mac_id].mac_add,
-		table->entries[mac_id].essid, 
+   if(!gzprintf(handle,"%s|%s|%u|%u|%d|%d|%s|%2.1f|%2.1f|%2.1f|%d|%u",
+		table->entries[mac_id].mac_add,
+		table->entries[mac_id].essid,
 		table->entries[mac_id].cap_privacy,
 		table->entries[mac_id].cap_ess_ibss, 
 		table->entries[mac_id].freq ,
 		table->entries[mac_id].channel,
 		table->entries[mac_id].channel_info, 
-		(table->entries[mac_id].rate/table->entries[mac_id].packet_count))){
+		table->entries[mac_id].rate,
+		table->entries[mac_id].rate_mcs,
+		table->entries[mac_id].rate_max,
+		table->entries[mac_id].antenna,
+		table->entries[mac_id].channel_change
+		)){
      perror("error writing the zip file ");
-     exit(0);
-
+     exit(1);
    }    
    if(!gzprintf(handle,"|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%2.1f|%2.1f\n",
 		table->entries[mac_id].packet_count,
@@ -1161,7 +1173,7 @@ int address_table_write_update(address_table_t* table,gzFile handle) {
 		table->entries[mac_id].frag_err_count,
 		table->entries[mac_id].cfp_err_count,
 		table->entries[mac_id].retry_err_count,
-		table->entries[mac_id].strictly_ordered_err,
+		table->entries[mac_id].strictly_ordered_err_count,
 		table->entries[mac_id].pwr_mgmt_count, 
 		table->entries[mac_id].wep_enc_count,
 		table->entries[mac_id].more_frag_count,
@@ -1171,29 +1183,15 @@ int address_table_write_update(address_table_t* table,gzFile handle) {
 		(table->entries[mac_id].dbm_noise_sum/table->entries[mac_id].packet_count),	
 		(table->entries[mac_id].dbm_signal_sum/table->entries[mac_id].packet_count))){
      perror("error writing the zip file");
-     exit(0);
+     exit(1);
    }
-
-  } 
+  }
   return 0; 
 }
 
 
-static unsigned  int prev_rx_packets_1=0;
-static  unsigned int prev_tx_bytes_1=0; 
-static unsigned int prev_rx_bytes_1 =0; 
-static  unsigned int prev_tx_retries_1=0;  
-static unsigned  int prev_tx_packets_1 =0; 
-static unsigned  int prev_tx_failed_1=0;
-static int check=0;
-
 int agg_data(gzFile handle_counts){
 
-  static char buff[1024]; /*minimize stack size*/
-  static unsigned int prev_crc_err = 0;
-  static unsigned int prev_phy_err = 0;
-  static unsigned int prev_rx_pkts_all = 0;
-  static unsigned int prev_rx_bytes_all = 0;
   FILE *fproc = NULL;
 
   int phy_err_delta=0;
@@ -1262,7 +1260,7 @@ int agg_data(gzFile handle_counts){
   printf("phy_err is %u\n",phy_err);
   printf("rx_bytes_all is %u\n",rx_bytes_all);
   printf("rx_pkts_all is %u\n",rx_pkts_all);
-
+  
   printf("prev, crc_err_delta is %u %u\n",prev_crc_err, crc_err_delta);
   printf("prev, phy_err_delta is %u %u\n",prev_phy_err, phy_err_delta);
   printf("prev, rx_bytes_all_delta is %u %u\n",prev_rx_bytes_all,rx_bytes_all_delta);
@@ -1271,20 +1269,18 @@ int agg_data(gzFile handle_counts){
 
   if(check==0){
     if(!gzprintf(handle_counts,"%u|%u|%u|%u\n",prev_crc_err, prev_phy_err,prev_rx_bytes_all,prev_rx_pkts_all))
-    {
+      {
       perror("error writing the zip file :from debugfs 0 ");
       exit(1);
-    }
+      }
     check++;
   }
-
+  
   if(!gzprintf(handle_counts,"%d|%d|%d|%d\n",crc_err_delta, phy_err_delta,rx_bytes_all_delta,rx_pkts_all_delta))
     {
       perror("error writing the zip file :from debugfs 0 ");
       exit(1);
     }
-
-
   //-----------------------------------------------------
   if((fproc = fopen("/sys/kernel/debug/ieee80211/phy1/ath9k/recv", "r")) == NULL ){
     perror("Can't read from debugfs phy1");
@@ -1308,11 +1304,6 @@ int agg_data(gzFile handle_counts){
     }
   }
   fclose(fproc);
-
-  static unsigned int prev_crc_err_1 = 0;
-  static unsigned int prev_phy_err_1 = 0;
-  static unsigned int prev_rx_pkts_all_1 = 0;
-  static unsigned int prev_rx_bytes_all_1 = 0;
   
   phy_err_delta= phy_err - prev_phy_err_1 ;
   if(phy_err_delta<0){
@@ -1380,10 +1371,6 @@ int agg_data(gzFile handle_counts){
   int tx_bytes=0;  int tx_packets=0;
   int tx_retries =0;  int tx_failed=0;
   //  int rx_bitrate=0;  int tx_bitrate=0;
-
-  static unsigned  int prev_rx_packets=0;static  unsigned int prev_tx_bytes=0; 
-  static unsigned int prev_rx_bytes =0; static  unsigned int prev_tx_retries=0;  
-  static unsigned  int prev_tx_packets =0;  static unsigned  int prev_tx_failed=0;
 
   int delta_rx_packets=0;     int delta_tx_bytes=0;
   int delta_rx_bytes =0;      int delta_tx_retries=0;
@@ -1461,20 +1448,16 @@ int agg_data(gzFile handle_counts){
 	       prev_tx_packets,prev_tx_bytes, prev_tx_retries,prev_tx_failed))
     {
       syslog(LOG_ERR,"error writing the zip file :from wlan0");
-      //      perror("error writing the zip file :from wlan0");
       //though the command is having null output, One has to continue to read others, hence no returns/ exits
     }
      check++;
   }
   
-
-  //  printf("going to print iw details \n");
   if(!gzprintf(handle_counts,"%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d\n",delta_rx_packets,delta_rx_bytes ,
 	       delta_tx_packets,delta_tx_bytes, delta_tx_retries,delta_tx_failed,
 	       tx_rate_i,tx_rate_d,rx_rate_i,rx_rate_d,-signal_avg));
     {
       syslog(LOG_ERR,"error writing the zip file :from wlan0");
-      //      perror("error writing the zip file :from wlan0");
       //though the command is having null output, One has to continue to read others, hence no returns/ exits
     }
 #if 0    
@@ -1484,12 +1467,7 @@ int agg_data(gzFile handle_counts){
   printf("tx retries =%d, failed=%d\n", tx_retries,tx_failed);
   printf("delta : rx_packet=%d,rx_byte=%d tx_packet=%d,tx_bytes=%d,tx_retries=%d,tx_failed=%d\n",delta_rx_packets,delta_rx_bytes , delta_tx_packets,delta_tx_bytes, delta_tx_retries,delta_tx_failed) ;
 #endif
-
-
-
-  //  printf("tx bitrate =%d, rx bitrate=%d\n", tx_bitrate,rx_bitrate);
   //------------------------------------------------------
-
   fp = popen("iw wlan1 station dump", "r");
   if (fp == NULL) {
     perror("Failed on wlan1 command\n" );
@@ -1598,9 +1576,6 @@ int agg_data(gzFile handle_counts){
 }
 
 void write_update(){
-#ifdef MODE_DEBUG
-printf("*********************wrote update **************************\n");
-#endif
 gzFile handle = gzopen (PENDING_UPDATE_FILENAME, "wb");
  if (!handle) {
    perror("Could not open update file for writing\n");
@@ -1613,6 +1588,7 @@ gzFile handle = gzopen (PENDING_UPDATE_FILENAME, "wb");
  }
 
  address_table_write_update(&address_table,handle);
+
  gzclose(handle);
 
  char update_filename[FILENAME_MAX];
@@ -1620,8 +1596,8 @@ gzFile handle = gzopen (PENDING_UPDATE_FILENAME, "wb");
  if (rename(PENDING_UPDATE_FILENAME, update_filename)) {
    perror("Could not stage update\n");
    exit(1);
- }
 
+ }
 
  //fix this filename
  gzFile handle_counts = gzopen (PENDING_UPDATE_FILENAME_COUNTS, "wb");
@@ -1658,8 +1634,17 @@ static void handle_signals(int sig) {
   if (sig == SIGINT || sig == SIGTERM) {
     write_update();
     exit(0);
-  } else if (sig == SIGALRM) {
-    write_update();
+  } else if (sig == SIGALRM) {  
+  
+    if(timeval_2.tv_sec-timeval_1.tv_sec>30){
+      write_update();
+      printf("wrote update after %ld \n",timeval_2.tv_sec-timeval_1.tv_sec);
+      gettimeofday(&timeval_2,NULL);
+      timeval_1.tv_sec= timeval_2.tv_sec ;
+      timeval_1.tv_usec= timeval_2.tv_usec;
+    }else{
+      printf("Not writing data as it was recently written \n");
+    }
     set_next_alarm();
   }
 }
@@ -1688,17 +1673,52 @@ void process_packet (u_char * args, const struct pcap_pkthdr *header, const u_ch
     exit(1);
   }
 
+  ++packets_received;
+  if (packets_received % 5000 == 0) {
+    struct pcap_stat statistics0;
+    struct pcap_stat statistics1;
+    pcap_stats(pcap0, &statistics0);
+    pcap_stats(pcap1, &statistics1);
+#ifdef MODE_DEBUG
+    printf("Libpcap on phy0 has dropped %d packets since process creation\n", statistics0.ps_drop);
+    printf("Libpcap on phy1 has dropped %d packets since process creation\n", statistics1.ps_drop);
+#endif
+    pcap0_stat=statistics0.ps_drop - pcap0_stat;
+    pcap1_stat=statistics1.ps_drop - pcap1_stat;
+    gzFile handle2 = gzopen (PENDING_UPDATE_FILENAME_PCAP, "wb");
+    if (!handle2) {
+      perror("Could not open update file for writing pcap updates\n");
+      exit(1);
+    }
+    time_t current_timestamp = time(NULL);
+    if (!gzprintf(handle2,"%s %" PRId64 " %d %" PRId64 "\n",bismark_id,start_timestamp_microseconds,sequence_number,(int64_t)current_timestamp)) {
+      perror("Error writing update\n");
+      exit(1);
+    }
+    if(!gzprintf(handle2,"%d|%d\n",pcap0_stat,pcap1_stat)){
+	perror("error writing the zip file for pcap updates");
+	exit(1);
+    }
+
+    gzclose(handle2);
+    char update_filename[FILENAME_MAX];
+    snprintf(update_filename,FILENAME_MAX,UPDATE_FILENAME_PCAP,bismark_id,start_timestamp_microseconds,sequence_number);
+    if (rename(PENDING_UPDATE_FILENAME_PCAP, update_filename)) {
+      perror("Could not stage update for pcap data\n");
+      exit(1);
+    }
+
+  }
+
   snapend = packet+ header->caplen; 
   struct r_packet paket ;
- 
-   memset(&paket,'\0',sizeof(paket));
-   ieee802_11_radio_print(packet, header->len, header->caplen,&paket);
-   address_table_lookup(&address_table,&paket);
+  memset(&paket,'\0',sizeof(paket));
+  ieee802_11_radio_print(packet, header->len, header->caplen,&paket);
+  address_table_lookup(&address_table,&paket);
 
 #ifdef MODE_DEBUG
   printf("\n------------------------------------\n");
 #endif
-
   if (sigprocmask(SIG_UNBLOCK, &block_set, NULL) < 0) {
     perror("sigprocmask");
     exit(1);
@@ -1709,33 +1729,18 @@ void process_packet (u_char * args, const struct pcap_pkthdr *header, const u_ch
 int main(int argc, char* argv[])
 {
   if (argc<2){
-    printf("Usage: sniffer  <time interval(seconds)> \n");
-    exit(1); 
-  }
-
+    printf("Usage: sniffer <time constant for updation on server> \n");	
+    exit(1);
+  } 
   initialize_bismark_id();
-
   if( atoi(argv[1])){
   UPDATE_PERIOD_SECS= atoi(argv[1]);
-  printf("new value of secs is =%d\n",   UPDATE_PERIOD_SECS);
   }
-  else {
-    printf("using the 60 secs %d\n",   UPDATE_PERIOD_SECS);
-  }
-  printf("update period=%d%\n",UPDATE_PERIOD_SECS );
-
-  struct timeval start_timeval; 
-  gettimeofday(&start_timeval, NULL);
-  start_timestamp_microseconds  = start_timeval.tv_sec * NUM_MICROS_PER_SECOND + start_timeval.tv_usec;
-
-  initialize_signal_handler();
-  set_next_alarm();
-  char *filter = "type mgt subtype beacon"; //the awesome one liner
+  //setting the filter
+  char *filter = "type mgt subtype beacon"; 
   int               t;
   fd_set            fd_wait;
   struct timeval    st;
-  struct pcap      *pcap0=NULL;
-  struct pcap      *pcap1=NULL;
   char              errbuf[PCAP_ERRBUF_SIZE];
   char              errbuf1[PCAP_ERRBUF_SIZE];
   bpf_u_int32 netp;   
@@ -1743,6 +1748,15 @@ int main(int argc, char* argv[])
   struct bpf_program fp; 
   char  *device0="phy0";
   char  *device1="phy1";
+
+  gettimeofday(&start_timeval, NULL);
+  start_timestamp_microseconds  = start_timeval.tv_sec * NUM_MICROS_PER_SECOND + start_timeval.tv_usec;
+  timeval_1.tv_sec=  start_timeval.tv_sec;
+  timeval_1.tv_usec= start_timeval.tv_usec;
+
+  //setting the signal
+  initialize_signal_handler();
+  set_next_alarm();
 
   checkup(device0);
   checkup(device1);
@@ -1752,20 +1766,24 @@ int main(int argc, char* argv[])
 
   //setting the filter on phy0
  if (pcap_compile (pcap0, &fp, filter, 0, maskp) == -1){
-      fprintf (stderr, "Compile: %s\n", pcap_geterr (pcap0)); exit (1);
+      fprintf (stderr, "Compile: %s\n", pcap_geterr (pcap0));
+      exit (1);
   }
   
   if (pcap_setfilter (pcap0, &fp) == -1){
-    fprintf (stderr, "Setfilter: %s", pcap_geterr (pcap0)); exit (1);
+    fprintf (stderr, "Setfilter: %s", pcap_geterr (pcap0));
+    exit (1);
   }
 
   //setting the filter on phy1
  if (pcap_compile (pcap1, &fp, filter, 0, maskp) == -1){
-      fprintf (stderr, "Compile: %s\n", pcap_geterr (pcap1)); exit (1);
+      fprintf (stderr, "Compile: %s\n", pcap_geterr (pcap1)); 
+      exit (1);
   }
   
   if (pcap_setfilter (pcap1, &fp) == -1){
-    fprintf (stderr, "Setfilter: %s", pcap_geterr (pcap1)); exit (1);
+    fprintf (stderr, "Setfilter: %s", pcap_geterr (pcap1)); 
+    exit (1);
   }
   pcap_freecode (&fp); 
   //set them non blocking
@@ -1781,7 +1799,7 @@ int main(int argc, char* argv[])
     }
 
   address_table_init(&address_table);  
-
+  
   for(/*ever*/;;)
     {
       FD_ZERO(&fd_wait);
@@ -1792,17 +1810,13 @@ int main(int argc, char* argv[])
       st.tv_usec = 500; 
       t=select(FD_SETSIZE, &fd_wait, NULL, NULL, &st);
       switch(t)
-	{
-	case EINTR:// printf("#%d\n", EINTR);
-	  continue;  
-	case -1://  printf("#%d\n", EINTR);
+	{ 
+	case -1:  //omit case
 	  continue;
-	case  0:  
-	  //perror(".");
+	case  0:
 	  break;
 	default:
 	  if( FD_ISSET(pcap_fileno(pcap0), &fd_wait)) {
-	    // printf("for phy0\n");
 	    pcap_dispatch(pcap0,-1, (void *) process_packet, NULL);
 	  }
 	  if( FD_ISSET(pcap_fileno(pcap1), &fd_wait)) {
@@ -1813,5 +1827,5 @@ int main(int argc, char* argv[])
     }
     pcap_close (pcap0);
     pcap_close (pcap1);
-  return 0 ;
+    return 0 ;
 }

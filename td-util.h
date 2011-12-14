@@ -162,10 +162,6 @@ struct mgmt_body_t {
 #define TTEST2(var, l) (snapend - (l) <= snapend && \
 			(const u_char *)&(var) <= snapend - (l))
 
-#define T_MGMT 0x0  /* management */
-#define T_CTRL 0x1  /* control */
-#define T_DATA 0x2 /* data */
-
 
 #define CAPABILITY_ESS(cap)     ((cap) & 0x0001)
 #define CAPABILITY_IBSS(cap)    ((cap) & 0x0002)

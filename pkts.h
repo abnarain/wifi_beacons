@@ -4,11 +4,17 @@ struct r_packet {
   char mac_address[18];
   char essid[33] ;
   u_int16_t  freq ;
+
   u_int8_t db_sig;
   u_int8_t db_noise;
+
   int8_t dbm_sig;
   int8_t dbm_noise;
-  float rate; // check if this is float
+
+  float rate; 
+  float rate_mcs ;
+
+  float rate_max; 
   u_int8_t antenna;
 
   u_int8_t bad_fcs_err;
@@ -27,6 +33,7 @@ struct r_packet {
 
   u_int8_t cap_privacy ;
   u_int8_t cap_ess_ibss ;
+
 };
 
 
@@ -43,7 +50,7 @@ typedef struct {
   u_int16_t cfp_err_count ;
   u_int16_t frag_err_count ;
   u_int16_t retry_err_count;
-  u_int16_t strictly_ordered_err;
+  u_int16_t strictly_ordered_err_count;
 
   u_int16_t pwr_mgmt_count;
   u_int16_t wep_enc_count;
@@ -61,12 +68,14 @@ typedef struct {
   u_int16_t freq;
   
   float rate;
+  float rate_mcs ;
+  float rate_max; 
 
   char channel_info[5];
 
   u_int8_t cap_privacy ;
   u_int8_t cap_ess_ibss ;
-
+  u_int8_t channel_change;
 } address_table_entry_t;
 
 #define MAC_TABLE_ENTRIES 255

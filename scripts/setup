@@ -1,0 +1,70 @@
+#!/bin/sh /etc/rc.common
+#
+#Start and Stop functions to run the ipkg package
+#
+PIDFILE=/var/run/wifi_beacons.pid
+
+
+start(){
+
+    iw dev phy0 del 2>/dev/null
+    iw dev phy1 del 2>/dev/null
+
+    iw phy phy0 interface add phy0 type monitor
+    p=$?
+    if [ $p==0 ];then
+	echo "phy0 created \n " 
+    else
+	echo "Err: can't creat phy0 \n"
+	exit 1
+    fi
+    
+    iw phy phy1 interface add phy1 type monitor
+    p=$?
+    if [ $p==0 ];then
+	echo "phy1 created \n " 
+    else
+	echo "Err: can't creat phy1\n"
+	exit 1
+    fi
+
+#check the argument
+    if [ -f $PIDFILE ]; then
+	echo "pidfile $PIDFILE already exists; wifi beacons already running"
+	exit 1
+    fi
+
+    mkdir -p /tmp/sniffer
+
+    start-stop-daemon -S \
+	-x /tmp/usr/bin/wifi_beacons \
+	-p $PIDFILE \
+	-m -b 60   #number of seconds
+	    
+    exit 0
+}
+
+
+stop(){
+    
+    [ -f $PIDFILE ] && {
+	start-stop-daemon -K -q -p $PIDFILE -s TERM
+	rm -f $PIDFILE
+
+
+    }
+    
+    
+    
+    iw dev phy0 del
+    iw dev phy1 del
+    
+    echo "deleted the monitor interfaces\n"
+    
+    exit 0
+}
+
+restart(){
+    stop
+    start
+}
