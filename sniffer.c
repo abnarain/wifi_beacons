@@ -44,8 +44,6 @@
 sigset_t block_set;
 
 struct timeval start_timeval;
-struct timeval timeval_1; 
-struct timeval timeval_2; 
 
 static int sequence_number = 0;
 static char bismark_id[256];
@@ -1041,12 +1039,7 @@ int address_table_lookup(address_table_t*  table,struct r_packet* paket) {
 
   if (table->length == MAC_TABLE_ENTRIES) {
     //table is full, write it to a file 
-    printf("writing update now after %ld \n", timeval_2.tv_sec-timeval_1.tv_sec);
-    gettimeofday(&timeval_2, NULL);
     write_update();
-    //updating the timestamp
-    timeval_1.tv_sec  =timeval_2.tv_sec;
-    timeval_1.tv_usec =timeval_2.tv_usec;    
 
   } else {
     ++table->length;
@@ -1635,13 +1628,7 @@ static void handle_signals(int sig) {
     write_update();
     exit(0);
   } else if (sig == SIGALRM) {  
-  
-    if(timeval_2.tv_sec-timeval_1.tv_sec>30){
       write_update();
-      printf("wrote update after %ld \n",timeval_2.tv_sec-timeval_1.tv_sec);
-      gettimeofday(&timeval_2,NULL);
-      timeval_1.tv_sec= timeval_2.tv_sec ;
-      timeval_1.tv_usec= timeval_2.tv_usec;
     }else{
       printf("Not writing data as it was recently written \n");
     }
@@ -1751,8 +1738,6 @@ int main(int argc, char* argv[])
 
   gettimeofday(&start_timeval, NULL);
   start_timestamp_microseconds  = start_timeval.tv_sec * NUM_MICROS_PER_SECOND + start_timeval.tv_usec;
-  timeval_1.tv_sec=  start_timeval.tv_sec;
-  timeval_1.tv_usec= start_timeval.tv_usec;
 
   //setting the signal
   initialize_signal_handler();
