@@ -1629,10 +1629,7 @@ static void handle_signals(int sig) {
     exit(0);
   } else if (sig == SIGALRM) {  
       write_update();
-    }else{
-      printf("Not writing data as it was recently written \n");
-    }
-    set_next_alarm();
+      set_next_alarm();
   }
 }
 
