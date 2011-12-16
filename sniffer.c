@@ -60,13 +60,6 @@ static int pcap1_stat =0;
 
 static int64_t start_timestamp_microseconds;
 
-static unsigned  int prev_rx_packets_1=0;
-static unsigned int prev_tx_bytes_1=0; 
-static unsigned int prev_rx_bytes_1 =0; 
-static unsigned int prev_tx_retries_1=0;  
-static unsigned  int prev_tx_packets_1 =0; 
-static unsigned  int prev_tx_failed_1=0;
-
 static int check=0;
 static char buff[1024]; 
 
@@ -80,10 +73,6 @@ static unsigned int prev_phy_err_1 = 0;
 static unsigned int prev_rx_pkts_all_1 = 0;
 static unsigned int prev_rx_bytes_all_1 = 0;
 
-
-static unsigned  int prev_rx_packets =0;  static  unsigned int prev_tx_bytes=0; 
-static unsigned int prev_rx_bytes    =0;  static  unsigned int prev_tx_retries=0;  
-static unsigned  int prev_tx_packets =0;  static unsigned  int prev_tx_failed=0;
 
 void write_update();
 
@@ -1274,6 +1263,12 @@ int agg_data(gzFile handle_counts){
       perror("error writing the zip file :from debugfs 0 ");
       exit(1);
     }
+  if(!gzprintf(handle_counts,"%s\n","^ " )) {
+    printf("error writing the zip file :end of set");
+    //the command need not give output, hence  nothing to be written, but still cannot return/exit
+  }     
+
+
   //-----------------------------------------------------
   if((fproc = fopen("/sys/kernel/debug/ieee80211/phy1/ath9k/recv", "r")) == NULL ){
     perror("Can't read from debugfs phy1");
@@ -1348,32 +1343,37 @@ int agg_data(gzFile handle_counts){
       perror("error writing the zip file :from debugfs 1 ");
       exit(1);
     }
-
+  if(!gzprintf(handle_counts,"%s\n","--"))
+    {
+      perror("error writing the zip file :from debugfs 1 ");
+      exit(1);
+    }
 
   //============================= Done with copying from /sys ========================
 
-   char path[1035];
+  char path[1035];
   /* Open the command for reading. */
-   FILE *fp=NULL;
+  FILE *fp=NULL;
   fp = popen("iw wlan0 station dump", "r");
   if (fp == NULL) {
     perror("Failed to run wlan0 station dump command\n" );
     exit(0);
   }
-  int rx_bytes=0;  int rx_packets=0;
-  int tx_bytes=0;  int tx_packets=0;
-  int tx_retries =0;  int tx_failed=0;
-  //  int rx_bitrate=0;  int tx_bitrate=0;
-
-  int delta_rx_packets=0;     int delta_tx_bytes=0;
-  int delta_rx_bytes =0;      int delta_tx_retries=0;
-  int delta_tx_packets =0;       int delta_tx_failed=0;
-
-  int tx_rate_i =0; int tx_rate_d=0;
-  int rx_rate_i =0; int rx_rate_d=0; int signal_avg=0;
-
- 
+  unsigned int rx_bytes=0;   unsigned int rx_packets=0;
+  unsigned int tx_bytes=0;   unsigned int tx_packets=0;
+  unsigned int tx_retries =0;  
+  unsigned int tx_failed=0;
+  
+  int signal_avg=0;
+  char station[20];
+  
+  int tx_rate_d;  int tx_rate_i;  int rx_rate_d;  int rx_rate_i;
+  int r=0;
   while (fgets(path, sizeof(path)-1, fp) != NULL) {
+
+    if (strncmp(path, "Station",7) == 0) {
+      sscanf (path, "Station %s (on wlan0)",station );
+    }
     if (strncmp(path, "\trx bytes:",7) == 0) {
       sscanf (path, "\trx bytes:%u ",&rx_bytes );
     }
@@ -1394,84 +1394,61 @@ int agg_data(gzFile handle_counts){
     if (strncmp(path, "\ttx failed:", 8) == 0) {
       sscanf (path,  "\ttx failed:%u ",&tx_failed );
     }
+    if (strncmp(path, "\tsignal avg:", 11) == 0) {
+      sscanf (path,  "\tsignal avg:\t%d ",&signal_avg);  
+    }
     if (strncmp(path, "\ttx bitrate:", 8) == 0) {
-      sscanf (path,  "\ttx bitrate:\t%d.%d ",&tx_rate_i,&tx_rate_d);
+      sscanf (path,  "\ttx bitrate:\t%d.%d ",&tx_rate_i,&tx_rate_d);  
     }
     if (strncmp(path, "\trx bitrate:", 8) == 0) {
       sscanf (path,  "\trx bitrate:\t%d.%d ",&rx_rate_i,&rx_rate_d);  
     }
-    if (strncmp(path, "\tsignal avg:", 11) == 0) {
-      sscanf (path,  "\tsignal avg:\t%d ",&signal_avg);  
+   
+    if(r%11==0 && r!=0){
+#if 0
+      printf("%s|%d|%d|%d|%d|%u|%u|%d|%d|%d|%d|%d\n",
+	     station,rx_packets,rx_bytes , 
+	     tx_packets,tx_bytes,tx_retries,
+	     tx_failed, tx_rate_i,tx_rate_d,
+	     rx_rate_i,rx_rate_d,-signal_avg);   
+#endif   
+      if(!gzprintf(handle_counts,"%s|%d|%d|%d|%d|%u|%u|%d|%d|%d|%d|%d\n",
+		   station,rx_packets,rx_bytes , 
+		   tx_packets,tx_bytes,tx_retries,
+		   tx_failed,tx_rate_i,tx_rate_d,
+		   rx_rate_i,rx_rate_d,-signal_avg)) {
+	printf("error writing the zip file :from wlan0");
+	exit(1);
+	//the command need not give output, hence nothing to be written, but still cannot return/exit
+      }      
+      if(!gzprintf(handle_counts,"%s\n","$$" )) {
+        printf("error writing the zip file :end of set");
+	//the command need not give output, hence  nothing to be written, but still cannot return/exit
+      }     
     }
+    r++;
   }
   pclose(fp);
-  fp=NULL;
 
-  delta_rx_packets= rx_packets-prev_rx_packets;
-  delta_tx_bytes=tx_bytes- prev_tx_bytes;
-  delta_rx_bytes = rx_bytes-prev_rx_bytes ;
-  delta_tx_retries=tx_retries-prev_tx_retries;
-  delta_tx_packets =  tx_packets-prev_tx_packets;       
-  delta_tx_failed=tx_failed- prev_tx_failed;
+  if(!gzprintf(handle_counts,"%s\n","^ " )) {
+    printf("error writing the zip file :end of set");
+    //the command need not give output, hence  nothing to be written, but still cannot return/exit
+  }     
 
-  if(delta_rx_packets< 0 ) {
-    delta_rx_packets=  a- prev_rx_packets + rx_packets; 
-  }
-  if(delta_tx_bytes < 0 ){
-    delta_tx_bytes=  a- prev_tx_bytes+tx_bytes;
-  }
-  if(  delta_rx_bytes < 0 )  {
-    delta_rx_bytes =  a- prev_rx_bytes +rx_bytes; 
-  }
-  if(   delta_tx_retries < 0 ){
-    delta_tx_retries=  a- prev_tx_retries+tx_retries;
-  }
-  if(delta_tx_packets < 0 )  {
-    delta_tx_packets =   a- prev_tx_packets +tx_packets;
-  }
-  if( delta_tx_failed< 0 ){
-    delta_tx_failed=  a- prev_tx_failed+tx_failed;;
-  }
-  prev_rx_packets=rx_packets;    prev_tx_bytes=tx_bytes;
-  prev_rx_bytes =rx_bytes;     prev_tx_retries=tx_retries;
-  prev_tx_packets =tx_packets;      prev_tx_failed=tx_failed;
-  
-  if(check==2){
-  if(!gzprintf(handle_counts,"%u|%u|%u|%u|%u|%u\n",prev_rx_packets,prev_rx_bytes ,
-	       prev_tx_packets,prev_tx_bytes, prev_tx_retries,prev_tx_failed))
-    {
-      syslog(LOG_ERR,"error writing the zip file :from wlan0");
-      //though the command is having null output, One has to continue to read others, hence no returns/ exits
-    }
-     check++;
-  }
-  
-  if(!gzprintf(handle_counts,"%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d\n",delta_rx_packets,delta_rx_bytes ,
-	       delta_tx_packets,delta_tx_bytes, delta_tx_retries,delta_tx_failed,
-	       tx_rate_i,tx_rate_d,rx_rate_i,rx_rate_d,-signal_avg));
-    {
-      syslog(LOG_ERR,"error writing the zip file :from wlan0");
-      //though the command is having null output, One has to continue to read others, hence no returns/ exits
-    }
-#if 0    
-  printf("WLAN0 stats \n");
-  printf("rx packets =%d, bytes=%d\n", rx_packets,rx_bytes);
-  printf("tx packets =%d, bytes=%d\n", tx_packets,tx_bytes);
-  printf("tx retries =%d, failed=%d\n", tx_retries,tx_failed);
-  printf("delta : rx_packet=%d,rx_byte=%d tx_packet=%d,tx_bytes=%d,tx_retries=%d,tx_failed=%d\n",delta_rx_packets,delta_rx_bytes , delta_tx_packets,delta_tx_bytes, delta_tx_retries,delta_tx_failed) ;
-#endif
   //------------------------------------------------------
+  
+  r=0;
+  fp=NULL;
+  u_int8_t file_e =1 ;
   fp = popen("iw wlan1 station dump", "r");
   if (fp == NULL) {
     perror("Failed on wlan1 command\n" );
     exit(1);
   }
- 
-  int delta_rx_packets_1=0;     int delta_tx_bytes_1=0;
-  int delta_rx_bytes_1 =0;      int delta_tx_retries_1=0;
-  int delta_tx_packets_1 =0;       int delta_tx_failed_1=0;
-
   while (fgets(path, sizeof(path)-1, fp) != NULL) {
+    if (strncmp(path, "Station",7) == 0) {
+      sscanf (path, "Station %s (on wlan0)",station );
+    }
     if (strncmp(path, "\trx bytes:",7) == 0) {
       sscanf (path, "\trx bytes:%u ",&rx_bytes );
     }
@@ -1500,70 +1477,88 @@ int agg_data(gzFile handle_counts){
     }
     if (strncmp(path, "\tsignal avg:", 11) == 0) {
       sscanf (path,  "\tsignal avg:\t%d ",&signal_avg);  
-    }    
-  }
+    } 
+   
+    if(r%11==0 && r!=0){
+#if 0
+      printf("%s|%d|%d|%d|%d|%u|%u|%d|%d|%d|%d|%d\n",
+	     station,rx_packets,rx_bytes , 
+	     tx_packets,tx_bytes,tx_retries,
+	     tx_failed, tx_rate_i,tx_rate_d,
+	     rx_rate_i,rx_rate_d,-signal_avg);      
+#endif
+      if(!gzprintf(handle_counts,"%s|%d|%d|%d|%d|%u|%u|%d|%d|%d|%d|%d\n",
+		   station,rx_packets,rx_bytes , 
+		   tx_packets,tx_bytes,tx_retries,
+		   tx_failed,tx_rate_i,tx_rate_d,
+		   rx_rate_i,rx_rate_d,-signal_avg)) {
+	printf("error writing the zip file :from wlan0");
+	exit(1);
+	//the command need not give output, hence nothing to be written, but still cannot return/exit
+      }      
+
+      if(!gzprintf(handle_counts,"%s\n","$$" )) {
+        printf("error writing the zip file :end of set");
+	//the command need not give output, hence  nothing to be written, but still cannot return/exit
+      }
+    }
+    r++;
+  }  
   pclose(fp);
 
-  delta_rx_bytes_1 =rx_bytes- prev_rx_bytes_1 ;
-  delta_rx_packets_1=  rx_packets- prev_rx_packets_1 ;
-  delta_tx_bytes_1= tx_bytes-prev_tx_bytes_1;
-  delta_tx_retries_1 = tx_retries-prev_tx_retries_1 ;
-  delta_tx_packets_1 =   tx_packets-prev_tx_packets_1;
-  delta_tx_failed_1 = prev_tx_failed_1- tx_failed;  
-#if 0
-  printf("tx_pa %d %d %d\n", prev_tx_packets_1, delta_tx_packets_1, tx_packets);
-  printf("tx_re %d %d %d\n", prev_tx_retries_1, delta_tx_retries_1, tx_retries);
-#endif  
-  
-  if(delta_rx_packets_1< 0 ) {
-    delta_rx_packets_1=  a- prev_rx_packets_1 + rx_packets; 
-  }
-  if(delta_tx_bytes_1 < 0 ){
-    delta_tx_bytes_1=  a- prev_tx_bytes_1+tx_bytes;
-  }
-  if(  delta_rx_bytes_1 < 0 )  {
-    delta_rx_bytes_1 =  a- prev_rx_bytes_1 +rx_bytes; 
-  }
-  if(   delta_tx_retries < 0 ){
-    delta_tx_retries_1=  a- prev_tx_retries+tx_retries;
-  }
-  if(delta_tx_packets_1 < 0 )  {
-    delta_tx_packets_1 =   a- prev_tx_packets_1 +tx_packets;
-  }
-  if( delta_tx_failed_1< 0 ){
-    delta_tx_failed_1=  a- prev_tx_failed_1 + tx_failed ;
-  }
-#if 0
-  printf("WLAN1 stats \n");
-  printf("delta : rx_packet=%2d,rx_byte=%2d tx_packet=%2d,tx_bytes=%2d,tx_retries=%2d,tx_failed=%d",delta_rx_packets_1,delta_rx_bytes_1 , delta_tx_packets_1,delta_tx_bytes_1, delta_tx_retries_1,delta_tx_failed_1) ;
-  printf("rx packets =%d, bytes=%d\n", rx_packets,rx_bytes);
-  printf("tx packets =%d, bytes=%d\n", tx_packets,tx_bytes);
-  printf("tx retries =%d, failed=%d\n", tx_retries,tx_failed);
-  printf("prev rx_bytes=%d,rx_packets=%d \n",prev_rx_bytes_1,prev_rx_packets_1);
-#endif
-  prev_rx_packets_1=rx_packets;    prev_tx_bytes_1=tx_bytes;
-  prev_rx_bytes_1 =rx_bytes;     prev_tx_retries_1=tx_retries;
-  prev_tx_packets_1 =tx_packets;      prev_tx_failed_1=tx_failed;
-  
-  if(check==3){
-  if(!gzprintf(handle_counts,"%u|%u|%u|%u|%u|%u\n",prev_rx_packets_1,prev_rx_bytes_1 , 
-	       prev_tx_packets_1,prev_tx_bytes_1, prev_tx_retries_1,prev_tx_failed_1)){
-    syslog(LOG_ERR,"error writing the zip file :from wlan1");
-      //the command need not give output, hence nothing to be written, but still cannot return/exit
-  }
-  check++;
+  if(!gzprintf(handle_counts,"%s\n","--" )) {
+    printf("error writing the zip file :end of set");
+    //the command need not give output, hence  nothing to be written, but still cannot return/exit
   }
 
-  if(!gzprintf(handle_counts,"%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d\n",delta_rx_packets_1,delta_rx_bytes_1 , 
-	       delta_tx_packets_1,delta_tx_bytes_1, delta_tx_retries_1,delta_tx_failed_1,
-	       tx_rate_i,tx_rate_d,rx_rate_i,rx_rate_d,-signal_avg)) {
-    syslog(LOG_ERR,"error writing the zip file :from wlan1");
-      //the command need not give output, hence nothing to be written, but still cannot return/exit
+
+  //--------------------------------Geeting iwconfig outputs---------------------------------------------------
+
+  fp=NULL;
+  char p[5];
+  int f; int g;
+  int tp;
+  p[0]='\0';
+  fp = popen("iwconfig wlan0", "r");
+  if (fp == NULL) {
+    perror("Failed to iwconfig wlan0 \n" );
+    exit(0);
+  }
+  while (fgets(path, sizeof(path)-1, fp) != NULL) {
+    if (strncmp(path, "wlan0",5) == 0) {
+      sscanf (path, "wlan0\tIEEE 802.11%s  Mode:Master  Frequency:%d.%d GHz  Tx-Power=%d ",p,&f,&g,&tp);
     }
-  if(!gzprintf(handle_counts,"%s\n","-" )) {
-    syslog(LOG_ERR,"error writing the zip file :end of set");
-      //the command need not give output, hence nothing to be written, but still cannot return/exit
+  }
+  // printf("first new p=%s f=%d g=%d tp=%d\n",p,f,g,tp);
+  if(!gzprintf(handle_counts,"%s|%d|%d|%d\n",p,f,g,tp )) {
+    printf("error writing the zip file :end of set");    
+  }
+
+  //----------------------------------------------------------------------------------------------------
+
+  if(!gzprintf(handle_counts,"%s\n","^ " )) {
+    printf("error writing the zip file :end of set");
+    //the command need not give output, hence  nothing to be written, but still cannot return/exit
+  }     
+
+  fp=NULL; 
+  p[0]='\0';
+  fp = popen("iwconfig wlan1", "r");
+  if (fp == NULL) {
+    perror("Failed to run iwconfig wlan1 \n" );
+    exit(0);
+  }
+  while (fgets(path, sizeof(path)-1, fp) != NULL) {
+    if (strncmp(path, "wlan1",5) == 0) {
+      printf("%s\n",path);
+      sscanf (path, "wlan1\tIEEE 802.11%s  Mode:Master  Frequency:%d.%d GHz  Tx-Power=%d ",p,&f,&g,&tp);      
     }
+  }
+  //  printf("sec p=%s f=%d g=%d tp=%d\n",p,f,g,tp); 
+  if(!gzprintf(handle_counts,"%s|%d|%d|%d\n",p,f,g,tp )) {
+    printf("error writing the zip file :end of set");
+    
+  }
   
   return 0; 
 }
@@ -1691,7 +1686,6 @@ void process_packet (u_char * args, const struct pcap_pkthdr *header, const u_ch
       perror("Could not stage update for pcap data\n");
       exit(1);
     }
-
   }
 
   snapend = packet+ header->caplen; 
