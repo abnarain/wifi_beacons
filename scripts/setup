@@ -13,18 +13,18 @@ start(){
     iw phy phy0 interface add phy0 type monitor
     p=$?
     if [ $p==0 ];then
-	echo "phy0 created \n " 
+	echo "phy0 created " 
     else
-	echo "Err: can't creat phy0 \n"
+	echo "Err: can't creat phy0 "
 	exit 1
     fi
     
     iw phy phy1 interface add phy1 type monitor
     p=$?
     if [ $p==0 ];then
-	echo "phy1 created \n " 
+	echo "phy1 created  " 
     else
-	echo "Err: can't creat phy1\n"
+	echo "Err: can't creat phy1"
 	exit 1
     fi
 
@@ -41,7 +41,7 @@ start(){
 	-p $PIDFILE \
 	-m -b 60   #number of seconds
 	    
-    exit 0
+    
 }
 
 
@@ -54,14 +54,11 @@ stop(){
 
     }
     
-    
-    
     iw dev phy0 del
     iw dev phy1 del
     
-    echo "deleted the monitor interfaces\n"
+    echo "deleted the monitor interfaces"
     
-    exit 0
 }
 
 restart(){
