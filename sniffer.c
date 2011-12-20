@@ -1041,13 +1041,15 @@ int address_table_lookup(address_table_t*  table,struct r_packet* paket) {
   memcpy(table->entries[table->last].mac_add, paket->mac_address, sizeof(m_address));
   table->entries[table->last].packet_count =  table->entries[table->last].packet_count+1;  
   table->entries[table->last].db_signal_sum=paket->db_sig; 
-  table->entries[table->last].db_noise_sum=paket->db_noise;
- 
+  table->entries[table->last].db_noise_sum=paket->db_noise; 
   table->entries[table->last].dbm_noise_sum =paket->dbm_noise ;
   table->entries[table->last].dbm_signal_sum =((float)-(paket->dbm_sig));    
 
   //counters 
+  if(paket->bad_fcs_err){
   table->entries[table->last].bad_fcs_err_count=paket->bad_fcs_err;    
+  }
+  else{
   table->entries[table->last].short_preamble_err_count = paket->short_preamble_err;
   table->entries[table->last].radiotap_wep_err_count= paket->radiotap_wep_err;
   table->entries[table->last].frag_err_count =paket->frag_err;
@@ -1068,6 +1070,7 @@ int address_table_lookup(address_table_t*  table,struct r_packet* paket) {
   table->entries[table->last].rate_max=paket->rate_max;
   table->entries[table->last].antenna = paket->antenna;
   table->entries[table->last].channel_change = 0;
+  }
 
   if (table->added_since_last_update < MAC_TABLE_ENTRIES) {
     ++table->added_since_last_update;
@@ -1351,7 +1354,7 @@ int agg_data(gzFile handle_counts){
 
   //============================= Done with copying from /sys ========================
 
-  char path[1035];
+  char path[2035];
   /* Open the command for reading. */
   FILE *fp=NULL;
   fp = popen("iw wlan0 station dump", "r");
@@ -1406,13 +1409,13 @@ int agg_data(gzFile handle_counts){
    
     if(r%11==0 && r!=0){
 #if 0
-      printf("%s|%d|%d|%d|%d|%u|%u|%d|%d|%d|%d|%d\n",
+      printf("%s|%u|%u|%u|%u|%u|%u|%d|%d|%d|%d|%d\n",
 	     station,rx_packets,rx_bytes , 
 	     tx_packets,tx_bytes,tx_retries,
 	     tx_failed, tx_rate_i,tx_rate_d,
 	     rx_rate_i,rx_rate_d,-signal_avg);   
 #endif   
-      if(!gzprintf(handle_counts,"%s|%d|%d|%d|%d|%u|%u|%d|%d|%d|%d|%d\n",
+      if(!gzprintf(handle_counts,"%s|%u|%u|%u|%u|%u|%u|%d|%d|%d|%d|%d\n",
 		   station,rx_packets,rx_bytes , 
 		   tx_packets,tx_bytes,tx_retries,
 		   tx_failed,tx_rate_i,tx_rate_d,
@@ -1481,13 +1484,13 @@ int agg_data(gzFile handle_counts){
    
     if(r%11==0 && r!=0){
 #if 0
-      printf("%s|%d|%d|%d|%d|%u|%u|%d|%d|%d|%d|%d\n",
+      printf("%s|%u|%u|%u|%u|%u|%u|%d|%d|%d|%d|%d\n",
 	     station,rx_packets,rx_bytes , 
 	     tx_packets,tx_bytes,tx_retries,
 	     tx_failed, tx_rate_i,tx_rate_d,
 	     rx_rate_i,rx_rate_d,-signal_avg);      
 #endif
-      if(!gzprintf(handle_counts,"%s|%d|%d|%d|%d|%u|%u|%d|%d|%d|%d|%d\n",
+      if(!gzprintf(handle_counts,"%s|%u|%u|%u|%u|%u|%u|%d|%d|%d|%d|%d\n",
 		   station,rx_packets,rx_bytes , 
 		   tx_packets,tx_bytes,tx_retries,
 		   tx_failed,tx_rate_i,tx_rate_d,
@@ -1533,7 +1536,7 @@ int agg_data(gzFile handle_counts){
   if(!gzprintf(handle_counts,"%s|%d|%d|%d\n",p,f,g,tp )) {
     printf("error writing the zip file :end of set");    
   }
-
+  pclose(fp);
   //----------------------------------------------------------------------------------------------------
 
   if(!gzprintf(handle_counts,"%s\n","^ " )) {
@@ -1559,7 +1562,9 @@ int agg_data(gzFile handle_counts){
     printf("error writing the zip file :end of set");
     
   }
-  
+  pclose(fp);
+  fp=NULL;
+
   return 0; 
 }
 
