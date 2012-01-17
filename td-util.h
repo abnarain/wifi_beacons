@@ -1,4 +1,22 @@
 
+#include <endian.h>
+#if BYTE_ORDER == LITTLE_ENDIAN
+	#define le64toh_(x) (x)
+	#define le32toh_(x) (x)
+	#define le16toh_(x) (x)
+	#define htole64_(x) (x)
+	#define htole32_(x) (x)
+	#define htole16_(x) (x)
+#else
+	#define le64toh_(x) bswap_64(x)
+	#define le32toh_(x) bswap_32(x)
+	#define le16toh_(x) bswap_16(x)
+	#define htole64_(x) bswap_64(x)
+	#define htole32_(x) bswap_32(x)
+	#define htole16_(x) bswap_16(x)
+#endif
+
+
 #define IEEE802_11_TSTAMP_LEN           8
 #define IEEE802_11_BCNINT_LEN           2
 #define IEEE802_11_CAPINFO_LEN          2
