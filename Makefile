@@ -1,17 +1,16 @@
-
 CC=gcc
 
 CFLAGS+=-c -Wall -O3 -fno-strict-aliasing -DOSX
 LDFLAGS+=-lpcap  -lz
 
-SOURCES=sniffer.c  create-interface.c
+SOURCES=sniffer.c  create-interface.c anonymization.c sha1.c util.c
 OBJECTS=$(SOURCES:.c=.o)
 EXECUTABLE=wifi_beacons
 
 all: clean $(SOURCES) $(EXECUTABLE)
 
 $(EXECUTABLE): $(OBJECTS)
-	$(CC) $(LDFLAGS) -lz -lpcap  $(OBJECTS) -o $@
+	$(CC) $(LDFLAGS)  $(OBJECTS) -o $@
 
 .c.o:
 	$(CC) $(CFLAGS) $< -o $@
