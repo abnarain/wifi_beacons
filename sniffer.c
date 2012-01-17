@@ -31,16 +31,16 @@
 #include "pkts.h"
 
 #define BISMARK_ID_FILENAME "/etc/bismark/ID"
-#define UPDATE_FILENAME "/tmp/bismark-uploads/wifi-beacons/%s-%" PRIu64 "-%d.gz"
+#define UPDATE_FILENAME "/tmp/bismark-uploads/wifi-beacons/%s-%" PRIu64 "-g-%d.gz"
 #define PENDING_UPDATE_FILENAME "/tmp/sniffer/current-update.gz"
 
-#define UPDATE_FILENAME_COUNTS "/tmp/bismark-uploads/wifi-beacons/%s-%" PRIu64 "-ag-%d.gz"
+#define UPDATE_FILENAME_COUNTS "/tmp/bismark-uploads/wifi-beacons/%s-%" PRIu64 "-ag-g-%d.gz"
 #define PENDING_UPDATE_FILENAME_COUNTS "/tmp/sniffer/current-ag-update.gz"
 
-#define UPDATE_FILENAME_PCAP "/tmp/bismark-uploads/wifi-beacons/%s-%" PRIu64 "-pcap-%d.gz"
+#define UPDATE_FILENAME_PCAP "/tmp/bismark-uploads/wifi-beacons/%s-%" PRIu64 "-pcap-g-%d.gz"
 #define PENDING_UPDATE_FILENAME_PCAP "/tmp/sniffer/current-pcap-update.gz"
 
-#define UPDATE_FILENAME_DIGEST "/tmp/bismark-uploads/wifi-beacons/%s-%" PRIu64 "-digest-%d.gz"
+#define UPDATE_FILENAME_DIGEST "/tmp/bismark-uploads/wifi-beacons/%s-%" PRIu64 "-digest-g-%d.gz"
 #define PENDING_UPDATE_FILENAME_DIGEST "/tmp/sniffer/current-digest-update.gz"
 
 /* Set of signals that get blocked while processing a packet. */
