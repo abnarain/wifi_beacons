@@ -23,7 +23,7 @@
 #include <inttypes.h>
 #include <signal.h>
 #include <zlib.h>
-#include "util.h"
+#include "anonymization.h"
 #include "ieee80211_radiotap.h"
 #include "ieee80211.h"
 #include "td-util.h"
@@ -38,7 +38,10 @@
 #define PENDING_UPDATE_FILENAME_COUNTS "/tmp/sniffer/current-ag-update.gz"
 
 #define UPDATE_FILENAME_PCAP "/tmp/bismark-uploads/wifi-beacons/%s-%" PRIu64 "-pcap-%d.gz"
-#define PENDING_UPDATE_FILENAME_PCAP "/tmp/sniffer/current-update.gz"
+#define PENDING_UPDATE_FILENAME_PCAP "/tmp/sniffer/current-pcap-update.gz"
+
+#define UPDATE_FILENAME_DIGEST "/tmp/bismark-uploads/wifi-beacons/%s-%" PRIu64 "-digest-%d.gz"
+#define PENDING_UPDATE_FILENAME_DIGEST "/tmp/sniffer/current-digest-update.gz"
 
 /* Set of signals that get blocked while processing a packet. */
 sigset_t block_set;
@@ -90,7 +93,7 @@ void mgmt_header_print(const u_char *p, const u_int8_t **srcp,  const u_int8_t *
     u_char *ptr;
     ptr = hp->sa;
     char temp[18];
-
+    
     sprintf(temp,"%02x:%02x:%02x:%02x:%02x:%02x",ptr[0],ptr[1],ptr[2],ptr[3],ptr[4],ptr[5]);
     temp[17]='\0';
       
@@ -204,7 +207,7 @@ void ieee_802_11_hdr_print(u_int16_t fc, const u_char *p, u_int hdrlen, const u_
 #ifdef MODE_DEBUG
       printf("PM");
 #endif
-}
+    }
     if (FC_RETRY(fc)){
       paket->retry=1;
 #ifdef MODE_DEBUG
@@ -216,19 +219,19 @@ void ieee_802_11_hdr_print(u_int16_t fc, const u_char *p, u_int hdrlen, const u_
 #ifdef MODE_DEBUG
       printf("SO ");
 #endif
-}
+    }
     if (FC_WEP(fc)){
       paket->wep_enc=1;
 #ifdef MODE_DEBUG
       printf("WEP Encrypted ");
 #endif
-}
+    }
     if (FC_TYPE(fc) != T_CTRL || FC_SUBTYPE(fc) != CTRL_PS_POLL){
 #ifdef MODE_DEBUG
       printf(" dur: %d ", EXTRACT_LE_16BITS(&((const struct mgmt_header_t *)p)->duration));
 #endif
-} 
- }
+    } 
+  }
   switch (FC_TYPE(fc)) {
   case T_MGMT:
     mgmt_header_print(p, srcp, dstp,paket);
@@ -1269,10 +1272,10 @@ int agg_data(gzFile handle_counts){
   if(!gzprintf(handle_counts,"%s\n","^ " )) {
     printf("error writing the zip file :end of set");
     //the command need not give output, hence  nothing to be written, but still cannot return/exit
-  }     
-
+  }
 
   //-----------------------------------------------------
+
   if((fproc = fopen("/sys/kernel/debug/ieee80211/phy1/ath9k/recv", "r")) == NULL ){
     perror("Can't read from debugfs phy1");
     exit(1);
@@ -1281,8 +1284,6 @@ int agg_data(gzFile handle_counts){
     if (strncmp(buff,"           CRC ERR :",18) == 0) {
       sscanf(buff,"           CRC ERR :%u ", &crc_err);
     }
-
-
     if (strncmp(buff,"           PHY ERR :",18) == 0) {
       sscanf(buff,"           PHY ERR :%u ", &phy_err);
     }
@@ -1351,7 +1352,7 @@ int agg_data(gzFile handle_counts){
       perror("error writing the zip file :from debugfs 1 ");
       exit(1);
     }
-
+  
   //============================= Done with copying from /sys ========================
 
   char path[2035];
@@ -1406,17 +1407,38 @@ int agg_data(gzFile handle_counts){
     if (strncmp(path, "\trx bitrate:", 8) == 0) {
       sscanf (path,  "\trx bitrate:\t%d.%d ",&rx_rate_i,&rx_rate_d);  
     }
-   
+    /*
+      Have to anonymize the mac addresses before writing them into the file 
+     */
+    int i;
+    int j=0; uint8_t m[6]; uint8_t anon[6];
+    char anon_mac[17];char temp[6][3];
+    for(i=0;i<strlen(station);i++){
+      if (i==2 || i==5 || i==8 || i==11 || i==14) { ;
+      }else{
+	temp[j][0]=station[i]; temp[j][1]=station[++i]; temp[j][2]='\0';
+	j++;
+      }
+      }
+    int p=0;
+    for(p=0;p<6;p++){
+      sscanf(temp[p],"%02hhx",&m[p]);
+    }
+    anonymize_mac(m,anon);
+    anon_mac[0]='\0' ;
+    sprintf(anon_mac,"%02x:%02x:%02x:%02x:%02x:%02x",anon[0],  anon[1],  anon[2],  anon[3],  anon[4],  anon[5]);
+  
+    
     if(r%11==0 && r!=0){
 #if 0
       printf("%s|%u|%u|%u|%u|%u|%u|%d|%d|%d|%d|%d\n",
-	     station,rx_packets,rx_bytes , 
+	     anon_mac,rx_packets,rx_bytes , 
 	     tx_packets,tx_bytes,tx_retries,
 	     tx_failed, tx_rate_i,tx_rate_d,
 	     rx_rate_i,rx_rate_d,-signal_avg);   
 #endif   
       if(!gzprintf(handle_counts,"%s|%u|%u|%u|%u|%u|%u|%d|%d|%d|%d|%d\n",
-		   station,rx_packets,rx_bytes , 
+		   anon_mac,rx_packets,rx_bytes , 
 		   tx_packets,tx_bytes,tx_retries,
 		   tx_failed,tx_rate_i,tx_rate_d,
 		   rx_rate_i,rx_rate_d,-signal_avg)) {
@@ -1442,7 +1464,7 @@ int agg_data(gzFile handle_counts){
   
   r=0;
   fp=NULL;
-  u_int8_t file_e =1 ;
+ 
   fp = popen("iw wlan1 station dump", "r");
   if (fp == NULL) {
     perror("Failed on wlan1 command\n" );
@@ -1481,17 +1503,38 @@ int agg_data(gzFile handle_counts){
     if (strncmp(path, "\tsignal avg:", 11) == 0) {
       sscanf (path,  "\tsignal avg:\t%d ",&signal_avg);  
     } 
-   
+    /*
+      Have to anonymize the mac addresses before writing them into the file 
+     */
+    int i=0; int j=0;
+    char temp[6][3];
+    uint8_t m[6]; uint8_t anon[6];
+    char anon_mac[17];
+    for(i=0;i<strlen(station);i++){
+      if (i==2 || i==5 || i==8 || i==11 || i==14) { ;
+      }else{
+	temp[j][0]=station[i]; temp[j][1]=station[++i]; temp[j][2]='\0';
+	j++;
+      }
+    }
+    int p=0;
+    for(p=0;p<6;p++){
+      sscanf(temp[p],"%02hhx",&m[p]);
+    }
+    anonymize_mac(m,anon);
+    anon_mac[0]='\0' ;
+    sprintf(anon_mac,"%02x:%02x:%02x:%02x:%02x:%02x",anon[0],  anon[1],  anon[2],  anon[3],  anon[4],  anon[5]);
+        
     if(r%11==0 && r!=0){
 #if 0
       printf("%s|%u|%u|%u|%u|%u|%u|%d|%d|%d|%d|%d\n",
-	     station,rx_packets,rx_bytes , 
+	     anon_mac,rx_packets,rx_bytes , 
 	     tx_packets,tx_bytes,tx_retries,
 	     tx_failed, tx_rate_i,tx_rate_d,
 	     rx_rate_i,rx_rate_d,-signal_avg);      
 #endif
       if(!gzprintf(handle_counts,"%s|%u|%u|%u|%u|%u|%u|%d|%d|%d|%d|%d\n",
-		   station,rx_packets,rx_bytes , 
+		   anon_mac,rx_packets,rx_bytes , 
 		   tx_packets,tx_bytes,tx_retries,
 		   tx_failed,tx_rate_i,tx_rate_d,
 		   rx_rate_i,rx_rate_d,-signal_avg)) {
@@ -1553,7 +1596,6 @@ int agg_data(gzFile handle_counts){
   }
   while (fgets(path, sizeof(path)-1, fp) != NULL) {
     if (strncmp(path, "wlan1",5) == 0) {
-      printf("%s\n",path);
       sscanf (path, "wlan1\tIEEE 802.11%s  Mode:Master  Frequency:%d.%d GHz  Tx-Power=%d ",p,&f,&g,&tp);      
     }
   }
@@ -1581,7 +1623,6 @@ gzFile handle = gzopen (PENDING_UPDATE_FILENAME, "wb");
  }
 
  address_table_write_update(&address_table,handle);
-
  gzclose(handle);
 
  char update_filename[FILENAME_MAX];
@@ -1614,9 +1655,30 @@ gzFile handle = gzopen (PENDING_UPDATE_FILENAME, "wb");
    exit(1);
  }
 
+gzFile handle_digest = gzopen (PENDING_UPDATE_FILENAME_DIGEST, "wb");
+ if (!handle_digest) {
+   perror("Could not open update file for writing\n");
+   exit(1);
+ }
+ 
+ if (anonymization_write_update(handle_digest)) {
+   perror("Could not write anonymization update");
+   exit(1);
+ }
+ gzclose(handle_digest);
+ 
+ char update_filename_digest[FILENAME_MAX];
+ snprintf(update_filename_digest,FILENAME_MAX,UPDATE_FILENAME_DIGEST,bismark_id,start_timestamp_microseconds,sequence_number);
+ if (rename(PENDING_UPDATE_FILENAME_DIGEST, update_filename_digest)) {
+   perror("Could not stage update for anonumized digest key");
+   exit(1);
+ }
+
+ 
+ 
  ++sequence_number;
  address_table_init(&address_table);
-
+ 
 }
 
 static void set_next_alarm() {
@@ -1731,7 +1793,11 @@ int main(int argc, char* argv[])
   struct bpf_program fp; 
   char  *device0="phy0";
   char  *device1="phy1";
-
+  if (anonymization_init()) {
+    perror("Error initializing anonymizer\n");
+    return 1;
+  }
+  
   gettimeofday(&start_timeval, NULL);
   start_timestamp_microseconds  = start_timeval.tv_sec * NUM_MICROS_PER_SECOND + start_timeval.tv_usec;
 
