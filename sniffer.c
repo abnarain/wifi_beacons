@@ -31,16 +31,16 @@
 #include "pkts.h"
 
 #define BISMARK_ID_FILENAME "/etc/bismark/ID"
-#define UPDATE_FILENAME "/tmp/bismark-uploads/wifi-beacons/%s-%" PRIu64 "-g-%d.gz"
+#define UPDATE_FILENAME "/tmp/bismark-uploads/wifi-beacons/%s-%" PRIu64 "-n-%d.gz"
 #define PENDING_UPDATE_FILENAME "/tmp/sniffer/current-update.gz"
 
-#define UPDATE_FILENAME_COUNTS "/tmp/bismark-uploads/wifi-beacons/%s-%" PRIu64 "-ag-g-%d.gz"
+#define UPDATE_FILENAME_COUNTS "/tmp/bismark-uploads/wifi-beacons/%s-%" PRIu64 "-ag-n-%d.gz"
 #define PENDING_UPDATE_FILENAME_COUNTS "/tmp/sniffer/current-ag-update.gz"
 
-#define UPDATE_FILENAME_PCAP "/tmp/bismark-uploads/wifi-beacons/%s-%" PRIu64 "-pcap-g-%d.gz"
+#define UPDATE_FILENAME_PCAP "/tmp/bismark-uploads/wifi-beacons/%s-%" PRIu64 "-pcap-n-%d.gz"
 #define PENDING_UPDATE_FILENAME_PCAP "/tmp/sniffer/current-pcap-update.gz"
 
-#define UPDATE_FILENAME_DIGEST "/tmp/bismark-uploads/wifi-beacons/%s-%" PRIu64 "-digest-g-%d.gz"
+#define UPDATE_FILENAME_DIGEST "/tmp/bismark-uploads/wifi-beacons/%s-%" PRIu64 "-digest-n-%d.gz"
 #define PENDING_UPDATE_FILENAME_DIGEST "/tmp/sniffer/current-digest-update.gz"
 
 /* Set of signals that get blocked while processing a packet. */
@@ -339,7 +339,6 @@ int cpack_uint16(struct cpack_state *cs, u_int16_t *u)
     return -1;
 
   *u = EXTRACT_LE_16BITS(next);
-
   cs->c_next = next + sizeof(*u);
   return 0;
 }
@@ -381,7 +380,7 @@ int cpack_uint64(struct cpack_state *cs, u_int64_t *u)
 }
 //========================================================
 
-int parse_elements(struct mgmt_body_t *pbody, const u_char *p, int offset,u_int length)
+int parse_elements(struct mgmt_body_t *pbody, const u_char *p, int offset,u_int length, struct r_packet * paket)
 {
   struct ssid_t ssid;
   struct challenge_t challenge;
@@ -541,6 +540,10 @@ int parse_elements(struct mgmt_body_t *pbody, const u_char *p, int offset,u_int 
       }
       break;
     default:
+      if (*(p + offset)== HT_CAP){
+	// TODO
+	paket->n_enabled=1;
+      }
       if (!TTEST2(*(p + offset), 2))
 	return 0;
       if (length < 2)
@@ -582,7 +585,7 @@ int handle_beacon(const u_char *p, u_int length, struct r_packet * paket)
   offset += IEEE802_11_CAPINFO_LEN;
   length -= IEEE802_11_CAPINFO_LEN;
   
-  ret = parse_elements(&pbody, p, offset, length);
+  ret = parse_elements(&pbody, p, offset, length,paket);
   
   if (pbody.ssid_present) {     
     fn_print(pbody.ssid.ssid, NULL,paket); 
@@ -916,9 +919,9 @@ u_int ieee802_11_radio_print(const u_char *p, u_int length, u_int caplen, struct
        last_presentp++);
   if (IS_EXTENDED(last_presentp)) {
 #ifdef MODE_DEBUG
-    printf("more bitmap ext than bytes");
-#endif
+    printf("more bitmap ext than first 31");
     printf("** has more !!** \n");
+#endif
     return caplen;
   }
   iter = (u_char*)(last_presentp + 1);
@@ -1009,9 +1012,13 @@ int address_table_lookup(address_table_t*  table,struct r_packet* paket) {
 	  table->entries[mac_id].wep_enc_count++;
 	if(paket->more_frag)
 	  table->entries[mac_id].more_frag_count++;
+	if(paket->n_enabled)
+	  table->entries[mac_id].n_enabled_count++;
+	
 	table->entries[mac_id].rate_mcs=paket->rate_mcs;
 	table->entries[mac_id].rate = paket->rate;
 	table->entries[mac_id].antenna = paket->antenna;
+	
      }    
 #if 0
 	//printf("sig after %2.1f \n",table->entries[mac_id].dbm_signal_sum) ;
@@ -1046,6 +1053,7 @@ int address_table_lookup(address_table_t*  table,struct r_packet* paket) {
   table->entries[table->last].db_signal_sum=paket->db_sig; 
   table->entries[table->last].db_noise_sum=paket->db_noise; 
   table->entries[table->last].dbm_noise_sum =paket->dbm_noise ;
+
   table->entries[table->last].dbm_signal_sum =((float)-(paket->dbm_sig));    
 
   //counters 
@@ -1073,6 +1081,8 @@ int address_table_lookup(address_table_t*  table,struct r_packet* paket) {
   table->entries[table->last].rate_max=paket->rate_max;
   table->entries[table->last].antenna = paket->antenna;
   table->entries[table->last].channel_change = 0;
+  // for n enabled AP
+  table->entries[table->last].n_enabled_count =paket->n_enabled ;
   }
 
   if (table->added_since_last_update < MAC_TABLE_ENTRIES) {
@@ -1129,7 +1139,7 @@ int address_table_write_update(address_table_t* table,gzFile handle) {
 	  table->entries[mac_id].more_frag_count,
 	  table->entries[mac_id].db_signal_sum,
 	  table->entries[mac_id].db_noise_sum,
-	  0,
+	  table->entries[mac_id].n_enabled_count,/*0, this default value was previously of the n capability of AP */
 	  (table->entries[mac_id].dbm_noise_sum/table->entries[mac_id].packet_count),	
 	  (table->entries[mac_id].dbm_signal_sum/table->entries[mac_id].packet_count));
 
@@ -1167,7 +1177,7 @@ int address_table_write_update(address_table_t* table,gzFile handle) {
 		table->entries[mac_id].more_frag_count,
 		table->entries[mac_id].db_signal_sum,
 		table->entries[mac_id].db_noise_sum,
-		0,
+		table->entries[mac_id].n_enabled_count,/*0, this default value was previously of the n capability of AP */
 		(table->entries[mac_id].dbm_noise_sum/table->entries[mac_id].packet_count),	
 		(table->entries[mac_id].dbm_signal_sum/table->entries[mac_id].packet_count))){
      perror("error writing the zip file");
