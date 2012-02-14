@@ -90,6 +90,7 @@ void mgmt_header_print(const u_char *p,  struct r_packet* paket)
     snprintf(temp,18,"%02x:%02x:%02x:%02x:%02x:%02x",ptr[0],ptr[1],ptr[2],ptr[3],ptr[4],ptr[5]);
     //    temp[17]='\0';
     memcpy(paket->mac_address,temp,strlen(temp));
+    printf("p-m: %s  temp: %s \n",paket->mac_address,temp);
 #ifdef MODE_DEBUG
     printf("mac address =*%s* ",paket->mac_address );
     printf("BSSID: %s  \n",temp);
@@ -385,7 +386,7 @@ int parse_elements(struct mgmt_body_t *pbody, const u_char *p, int offset,u_int 
   pbody->ds_present = 0;
   pbody->cf_present = 0;
   pbody->tim_present = 0;
-
+  paket->n_enabled=0;
   while (length != 0) {
     if (!TTEST2(*(p + offset), 1))
       return 0;
