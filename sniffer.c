@@ -90,7 +90,6 @@ void mgmt_header_print(const u_char *p,  struct r_packet* paket)
     snprintf(temp,18,"%02x:%02x:%02x:%02x:%02x:%02x",ptr[0],ptr[1],ptr[2],ptr[3],ptr[4],ptr[5]);
     //    temp[17]='\0';
     memcpy(paket->mac_address,temp,strlen(temp));
-    printf("p-m: %s  temp: %s \n",paket->mac_address,temp);
 #ifdef MODE_DEBUG
     printf("mac address =*%s* ",paket->mac_address );
     printf("BSSID: %s  \n",temp);
