@@ -81,23 +81,15 @@ void write_update();
 
 //#define MODE_DEBUG 0
 
-void mgmt_header_print(const u_char *p, const u_int8_t **srcp,  const u_int8_t **dstp, struct r_packet* paket)
+void mgmt_header_print(const u_char *p,  struct r_packet* paket)
 {
-    const struct mgmt_header_t *hp = (const struct mgmt_header_t *) p;
-    
-    if (srcp != NULL)
-      *srcp = hp->sa;
-    if (dstp != NULL)
-      *dstp = hp->da;    
-
-    u_char *ptr;
+    const struct mgmt_header_t *hp = (const struct mgmt_header_t *) p;    
+    u_char *ptr =NULL ;
     ptr = hp->sa;
-    char temp[18];
-    
-    sprintf(temp,"%02x:%02x:%02x:%02x:%02x:%02x",ptr[0],ptr[1],ptr[2],ptr[3],ptr[4],ptr[5]);
-    temp[17]='\0';
-      
-      memcpy(paket->mac_address,temp,strlen(temp));
+    char temp[18];    
+    snprintf(temp,18,"%02x:%02x:%02x:%02x:%02x:%02x",ptr[0],ptr[1],ptr[2],ptr[3],ptr[4],ptr[5]);
+    //    temp[17]='\0';
+    memcpy(paket->mac_address,temp,strlen(temp));
 #ifdef MODE_DEBUG
     printf("mac address =*%s* ",paket->mac_address );
     printf("BSSID: %s  \n",temp);
@@ -190,7 +182,7 @@ void print_chaninfo(int freq, int flags, struct r_packet * paket)
   
 }
 
-void ieee_802_11_hdr_print(u_int16_t fc, const u_char *p, u_int hdrlen, const u_int8_t **srcp, const u_int8_t **dstp, struct r_packet *paket)
+void ieee_802_11_hdr_print(u_int16_t fc, const u_char *p, u_int hdrlen,  struct r_packet *paket)
 {
   int vflag;
   vflag=1;
@@ -234,7 +226,7 @@ void ieee_802_11_hdr_print(u_int16_t fc, const u_char *p, u_int hdrlen, const u_
   }
   switch (FC_TYPE(fc)) {
   case T_MGMT:
-    mgmt_header_print(p, srcp, dstp,paket);
+    mgmt_header_print(p, paket);
     break;
   default:
 #ifdef MODE_DEBUG
@@ -625,7 +617,6 @@ u_int ieee802_11_print(const u_char *p, u_int length, u_int orig_caplen, int pad
 {
   u_int16_t fc;
   u_int caplen, hdrlen;
-  const u_int8_t *src, *dst;
   
   caplen = orig_caplen;
   /* Remove FCS, if present */
@@ -662,7 +653,7 @@ u_int ieee802_11_print(const u_char *p, u_int length, u_int orig_caplen, int pad
   }
 
 
-  ieee_802_11_hdr_print(fc, p, hdrlen, &src, &dst,paket);
+  ieee_802_11_hdr_print(fc, p, hdrlen, paket);
   length -= hdrlen;
   caplen -= hdrlen;
   p += hdrlen;
