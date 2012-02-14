@@ -232,8 +232,6 @@ void ieee_802_11_hdr_print(u_int16_t fc, const u_char *p, u_int hdrlen,  struct 
 #ifdef MODE_DEBUG
     printf("UH%d",FC_TYPE(fc));
 #endif
-    *srcp = NULL;
-    *dstp = NULL;
     break;
   }
 }
