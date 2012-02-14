@@ -973,6 +973,7 @@ void address_table_init(address_table_t* table) {
 
 int address_table_lookup(address_table_t*  table,struct r_packet* paket) {
   char m_address[sizeof(paket->mac_address)];
+  memset(m_address,'\0',sizeof(paket->mac_address));
 #ifdef MODE_DEBUG
      printf("mac address %s\n", paket->mac_address);
      printf("essid %s \n", paket->essid);
@@ -1019,7 +1020,7 @@ int address_table_lookup(address_table_t*  table,struct r_packet* paket) {
 	table->entries[mac_id].rate = paket->rate;
 	table->entries[mac_id].antenna = paket->antenna;
 	
-     }    
+	}    
 #if 0
 	//printf("sig after %2.1f \n",table->entries[mac_id].dbm_signal_sum) ;
 	printf("Before essid  %s,  %s \n",table->entries[mac_id].essid,paket->essid);
@@ -1048,7 +1049,7 @@ int address_table_lookup(address_table_t*  table,struct r_packet* paket) {
   }
 
   memcpy(table->entries[table->last].essid, paket->essid, sizeof(paket->essid)); 
-  memcpy(table->entries[table->last].mac_add, paket->mac_address, sizeof(m_address));
+  memcpy(table->entries[table->last].mac_add, paket->mac_address, sizeof(paket->mac_address));
   table->entries[table->last].packet_count =  table->entries[table->last].packet_count+1;  
   table->entries[table->last].db_signal_sum=paket->db_sig; 
   table->entries[table->last].db_noise_sum=paket->db_noise; 
