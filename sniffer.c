@@ -532,7 +532,8 @@ int parse_elements(struct mgmt_body_t *pbody, const u_char *p, int offset,u_int 
     default:
       if (*(p + offset)== HT_CAP){
 	// TODO
-	paket->n_enabled=1;
+	if (!paket->bad_fcs_err)
+	  paket->n_enabled=1;
       }
       if (!TTEST2(*(p + offset), 2))
 	return 0;
