@@ -49,10 +49,10 @@ typedef struct {
   char mac_add[18];
   char essid[33];
 
-  unsigned int packet_count;
-  unsigned int n_enabled_count; // added on 14 feb, 2012
+  int packet_count;
+  int n_enabled_count; // added on 14 feb, 2012
 
-  unsigned int bad_fcs_err_count;
+  int bad_fcs_err_count;
   u_int16_t short_preamble_err_count;
   u_int16_t radiotap_wep_err_count;
   u_int16_t retry_count;
@@ -68,8 +68,8 @@ typedef struct {
   float dbm_signal_sum;
   float dbm_noise_sum;
   
-  float db_signal_sum;
-  float db_noise_sum;
+  u_int8_t db_signal_sum;
+  u_int8_t db_noise_sum;
 
   u_int8_t channel;
   u_int8_t antenna; 
