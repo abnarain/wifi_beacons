@@ -1152,7 +1152,7 @@ int address_table_write_update(address_table_t* table,gzFile handle) {
      perror("error writing the zip file ");
      exit(1);
    }    
-   if(!gzprintf(handle,"|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%2.1f|%2.1f\n",
+   if(!gzprintf(handle,"|%u|%u|%d|%d|%d|%d|%d|%d|%d|%d|%d|%2.1f|%2.1f|%u|%2.1f|%2.1f\n",
 		table->entries[mac_id].packet_count,
 		table->entries[mac_id].bad_fcs_err_count,
 		table->entries[mac_id].short_preamble_err_count,
