@@ -32,6 +32,7 @@ struct r_packet {
   u_int8_t channel;
 
   u_int8_t n_enabled; // added on 14 feb, 2012
+
   u_int8_t strictly_ordered;
   u_int8_t pwr_mgmt;
   u_int8_t wep_enc;
@@ -49,6 +50,7 @@ typedef struct {
   char essid[33];
 
   int packet_count;
+  int n_enabled_count; // added on 14 feb, 2012
 
   u_int16_t bad_fcs_err_count;
   u_int16_t short_preamble_err_count;
@@ -59,7 +61,7 @@ typedef struct {
   u_int16_t retry_err_count;
   u_int16_t strictly_ordered_err_count;
 
-  u_int8_t n_enabled_count; // added on 14 feb, 2012
+
 
   u_int16_t pwr_mgmt_count;
   u_int16_t wep_enc_count;
