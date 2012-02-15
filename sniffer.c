@@ -591,7 +591,7 @@ int handle_beacon(const u_char *p, u_int length, struct r_packet * paket)
     paket->rate_max=(float)((.5 * ((_r) & 0x7f)));
   }
   else {
-    paket->rate_max=0.0; // undefined rate, because of bad fcs
+    paket->rate_max=0.0; // undefined rate, because of bad fcs (might be a reason)
   }
 #ifdef MODE_DEBUG
   printf("%s",	 CAPABILITY_ESS(pbody.capability_info) ? "ESS" : "IBSS");
