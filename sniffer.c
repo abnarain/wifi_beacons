@@ -385,6 +385,7 @@ int parse_elements(struct mgmt_body_t *pbody, const u_char *p, int offset,u_int 
   pbody->ds_present = 0;
   pbody->cf_present = 0;
   pbody->tim_present = 0;
+  paket->n_enabled=0;
   while (length != 0) {
     if (!TTEST2(*(p + offset), 1))
       return 0;
@@ -530,7 +531,7 @@ int parse_elements(struct mgmt_body_t *pbody, const u_char *p, int offset,u_int 
       break;
     default:
       if (*(p + offset)== HT_CAP){
-	  paket->n_enabled=1;
+	  paket->n_enabled=1;	 
       }
       if (!TTEST2(*(p + offset), 2))
 	return 0;
