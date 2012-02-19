@@ -14,8 +14,8 @@ struct r_packet {
   u_int8_t db_sig;
   u_int8_t db_noise;
 
-  int8_t dbm_sig;
-  int8_t dbm_noise;
+  double dbm_sig; //changed from u_int8_t to double as now these values store the antilog of the signal recieved
+  double dbm_noise; 
 
   float rate; 
   float rate_mcs ;
@@ -65,8 +65,8 @@ typedef struct {
   u_int16_t wep_enc_count;
   u_int16_t more_frag_count;
 
-  float dbm_signal_sum;
-  float dbm_noise_sum;
+  long double dbm_signal_sum; //changed from float to long double as the values stored are the sum of antilogs and not the dbm values
+  long double dbm_noise_sum;
   
   u_int8_t db_signal_sum;
   u_int8_t db_noise_sum;

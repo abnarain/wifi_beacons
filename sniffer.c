@@ -23,6 +23,7 @@
 #include <inttypes.h>
 #include <signal.h>
 #include <zlib.h>
+#include <math.h>
 #include "anonymization.h"
 #include "ieee80211_radiotap.h"
 #include "ieee80211.h"
@@ -774,15 +775,15 @@ int print_radiotap_field(struct cpack_state *s, u_int32_t bit, u_int8_t *flags, 
     }
     break;
   case IEEE80211_RADIOTAP_DBM_ANTSIGNAL:
-    paket->dbm_sig=u.i8;
+    paket->dbm_sig=pow(10,u.i8/10); //storing the antilog
 #ifdef MODE_DEBUG
-    printf("%ddB  signal ", u.i8);
+    printf("%ddBm  signal ", u.i8);
 #endif
     break;
   case IEEE80211_RADIOTAP_DBM_ANTNOISE:
-    paket->dbm_noise=u.i8;
+    paket->dbm_noise=pow(10,u.i8/10); // storing the antilog
 #ifdef MODE_DEBUG
-    printf("%ddB  noise ", u.i8);
+    printf("%ddBm  noise ", u.i8);
 #endif
     break;
   case IEEE80211_RADIOTAP_DB_ANTSIGNAL:
@@ -979,7 +980,7 @@ int address_table_lookup(address_table_t*  table,struct r_packet* paket) {
 	table->entries[mac_id].db_signal_sum = table->entries[mac_id].db_signal_sum+ paket->db_sig;
 	table->entries[mac_id].db_noise_sum= table->entries[mac_id].db_noise_sum +paket->db_noise;
 	table->entries[mac_id].dbm_noise_sum = table->entries[mac_id].dbm_noise_sum + paket->dbm_noise ;
-	table->entries[mac_id].dbm_signal_sum =(float)-(paket->dbm_sig) + table->entries[mac_id].dbm_signal_sum ;
+	table->entries[mac_id].dbm_signal_sum = -(paket->dbm_sig) + table->entries[mac_id].dbm_signal_sum ;
 
 	if(paket->bad_fcs_err){
 	  table->entries[mac_id].bad_fcs_err_count++;
@@ -1136,6 +1137,17 @@ int address_table_write_update(address_table_t* table,gzFile handle) {
    printf("**%s %f %d %f**\n", table->entries[mac_id].mac_add, table->entries[mac_id].dbm_signal_sum,table->entries[mac_id].packet_count,
  	  table->entries[mac_id].dbm_signal_sum/ table->entries[mac_id].packet_count);
 #endif
+   double log_of_avg_alog_signal_sum=10*log10(table->entries[mac_id].dbm_noise_sum/table->entries[mac_id].packet_count);
+   
+
+   double log_of_avg_alog_noise_sum;
+   if(table->entries[mac_id].dbm_signal_sum){
+     log_of_avg_alog_noise_sum=10*log10(table->entries[mac_id].dbm_signal_sum/table->entries[mac_id].packet_count) ;
+   }
+   else
+     {
+       log_of_avg_alog_noise_sum=0.0;
+     }
    if(!gzprintf(handle,"%s|%s|%u|%u|%d|%d|%s|%2.1f|%2.1f|%2.1f|%d|%u",
 		table->entries[mac_id].mac_add,
 		table->entries[mac_id].essid,
@@ -1168,8 +1180,8 @@ int address_table_write_update(address_table_t* table,gzFile handle) {
 		table->entries[mac_id].db_signal_sum,
 		table->entries[mac_id].db_noise_sum,
 		table->entries[mac_id].n_enabled_count,/*0, this default value was previously of the n capability of AP */
-		(table->entries[mac_id].dbm_noise_sum/table->entries[mac_id].packet_count),	
-		(table->entries[mac_id].dbm_signal_sum/table->entries[mac_id].packet_count))){
+		log_of_avg_alog_noise_sum,
+		log_of_avg_alog_signal_sum)){
      perror("error writing the zip file");
      exit(1);
    }
@@ -1556,7 +1568,6 @@ int agg_data(gzFile handle_counts){
     printf("error writing the zip file :end of set");
     //the command need not give output, hence  nothing to be written, but still cannot return/exit
   }
-
 
   //--------------------------------Geeting iwconfig outputs---------------------------------------------------
 
