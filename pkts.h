@@ -65,8 +65,8 @@ typedef struct {
   u_int16_t wep_enc_count;
   u_int16_t more_frag_count;
 
-  long double dbm_signal_sum; //changed from float to long double as the values stored are the sum of antilogs and not the dbm values
-  long double dbm_noise_sum;
+  double dbm_signal_sum; //changed from float to long double as the values stored are the sum of antilogs and not the dbm values
+  double dbm_noise_sum;
   
   u_int8_t db_signal_sum;
   u_int8_t db_noise_sum;

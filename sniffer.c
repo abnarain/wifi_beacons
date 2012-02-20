@@ -980,7 +980,7 @@ int address_table_lookup(address_table_t*  table,struct r_packet* paket) {
 	table->entries[mac_id].db_signal_sum = table->entries[mac_id].db_signal_sum+ paket->db_sig;
 	table->entries[mac_id].db_noise_sum= table->entries[mac_id].db_noise_sum +paket->db_noise;
 	table->entries[mac_id].dbm_noise_sum = table->entries[mac_id].dbm_noise_sum + paket->dbm_noise ;
-	table->entries[mac_id].dbm_signal_sum = (paket->dbm_sig) + table->entries[mac_id].dbm_signal_sum ;
+	table->entries[mac_id].dbm_signal_sum = paket->dbm_sig + table->entries[mac_id].dbm_signal_sum ;
 
 	if(paket->bad_fcs_err){
 	  table->entries[mac_id].bad_fcs_err_count++;
@@ -1139,7 +1139,7 @@ int address_table_write_update(address_table_t* table,gzFile handle) {
 #endif
 
    double log_of_avg_alog_signal_sum= 0.0;   
-   double log_of_avg_alog_noise_sum =0.0; 
+   float log_of_avg_alog_noise_sum =0.0; 
 
    //for signal
    if(table->entries[mac_id].dbm_signal_sum==0.0 ||table->entries[mac_id].packet_count==0 ){
@@ -1147,17 +1147,10 @@ int address_table_write_update(address_table_t* table,gzFile handle) {
    }
    else
      {
-       log_of_avg_alog_signal_sum=10*log10(table->entries[mac_id].dbm_signal_sum/table->entries[mac_id].packet_count) ;
+       double _t = table->entries[mac_id].packet_count;
+       log_of_avg_alog_signal_sum=10*log10((double)(table->entries[mac_id].dbm_signal_sum/_t)) ;
      }
 
-   //for noise
-   if(table->entries[mac_id].dbm_noise_sum==0.0 ||table->entries[mac_id].packet_count==0 ){
-     log_of_avg_alog_noise_sum=0.0;
-   }
-   else
-     {
-       log_of_avg_alog_noise_sum=10*log10(table->entries[mac_id].dbm_noise_sum/table->entries[mac_id].packet_count) ;
-     }   
 
    if(!gzprintf(handle,"%s|%s|%u|%u|%d|%d|%s|%2.1f|%2.1f|%2.1f|%d|%u",
 		table->entries[mac_id].mac_add,
