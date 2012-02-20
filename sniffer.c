@@ -1139,15 +1139,14 @@ int address_table_write_update(address_table_t* table,gzFile handle) {
 #endif
 
    double log_of_avg_alog_signal_sum= 0.0;   
-   float log_of_avg_alog_noise_sum =0.0; 
-
+   int log_of_avg_alog_noise_sum =0; //just put it as 0
+   double _t = table->entries[mac_id].packet_count;
    //for signal
    if(table->entries[mac_id].dbm_signal_sum==0.0 ||table->entries[mac_id].packet_count==0 ){
      log_of_avg_alog_signal_sum=0.0;
    }
    else
      {
-       double _t = table->entries[mac_id].packet_count;
        log_of_avg_alog_signal_sum=10*log10((double)(table->entries[mac_id].dbm_signal_sum/_t)) ;
      }
 
