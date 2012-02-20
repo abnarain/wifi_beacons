@@ -1139,7 +1139,7 @@ int address_table_write_update(address_table_t* table,gzFile handle) {
 #endif
 
    double log_of_avg_alog_signal_sum= 0.0;   
-   int log_of_avg_alog_noise_sum =0; //just put it as 0
+   float log_of_avg_alog_noise_sum =0; //just put it as 0
    double _t = table->entries[mac_id].packet_count;
    //for signal
    if(table->entries[mac_id].dbm_signal_sum==0.0 ||table->entries[mac_id].packet_count==0 ){
@@ -1149,7 +1149,7 @@ int address_table_write_update(address_table_t* table,gzFile handle) {
      {
        log_of_avg_alog_signal_sum=10*log10((double)(table->entries[mac_id].dbm_signal_sum/_t)) ;
      }
-
+   float f=   log_of_avg_alog_signal_sum;
 
    if(!gzprintf(handle,"%s|%s|%u|%u|%d|%d|%s|%2.1f|%2.1f|%2.1f|%d|%u",
 		table->entries[mac_id].mac_add,
@@ -1184,7 +1184,7 @@ int address_table_write_update(address_table_t* table,gzFile handle) {
 		table->entries[mac_id].db_noise_sum,
 		table->entries[mac_id].n_enabled_count,/*0, this default value was previously of the n capability of AP */
 		log_of_avg_alog_noise_sum,
-		log_of_avg_alog_signal_sum)){
+		f)){
      perror("error writing the zip file");
      exit(1);
    }
